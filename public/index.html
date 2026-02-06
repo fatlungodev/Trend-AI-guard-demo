@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Guard Middleware - Gateway</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --primary: #38bdf8;
+            --secondary: #818cf8;
+            --text: #f8fafc;
+            --muted: #64748b;
+            --danger: #ef4444;
+            --success: #22c55e;
+            --warning: #f59e0b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            padding: 1rem 2rem;
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .tabs {
+            display: flex;
+            background: var(--card);
+            padding: 0.25rem;
+            border-radius: 0.75rem;
+            gap: 0.25rem;
+        }
+
+        .tab {
+            padding: 0.5rem 1.5rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
+            font-size: 0.9rem;
+            opacity: 0.6;
+        }
+
+        .tab.active {
+            background: var(--bg);
+            opacity: 1;
+            color: var(--primary);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .view {
+            display: none;
+            flex: 1;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .view.active {
+            display: flex;
+        }
+
+        /* Chat View Styles */
+        #chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 1rem;
+            border-radius: 1rem;
+            line-height: 1.5;
+            animation: fadeIn 0.3s ease-out;
+            position: relative;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .user {
+            align-self: flex-end;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+        }
+
+        .ai {
+            align-self: flex-start;
+            background: var(--card);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .system {
+            align-self: center;
+            font-size: 0.8rem;
+            opacity: 0.6;
+            background: transparent;
+        }
+
+        .controls {
+            padding: 1.5rem 2rem;
+            background: var(--bg);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            gap: 1rem;
+        }
+
+        /* Auth View Styles */
+        .auth-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .qr-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        canvas {
+            max-width: 100%;
+            height: auto !important;
+        }
+
+        .status-info {
+            margin-bottom: 2rem;
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+
+        .dot-connected {
+            background: var(--success);
+            box-shadow: 0 0 10px var(--success);
+        }
+
+        .dot-connecting {
+            background: var(--warning);
+            box-shadow: 0 0 10px var(--warning);
+        }
+
+        .dot-disconnected {
+            background: var(--danger);
+            box-shadow: 0 0 10px var(--danger);
+        }
+
+        /* General UI Elements */
+        input {
+            flex: 1;
+            background: var(--card);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 1rem;
+            border-radius: 0.75rem;
+            color: white;
+            outline: none;
+            transition: border 0.3s;
+        }
+
+        input:focus {
+            border-color: var(--primary);
+        }
+
+        button {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.75rem;
+            border: none;
+            background: var(--primary);
+            color: var(--bg);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        button:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--primary);
+            color: var(--primary);
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .status-badge {
+            padding: 0.4rem 0.8rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .badge-guard-active {
+            background: rgba(34, 197, 94, 0.1);
+            color: var(--success);
+            border: 1px solid var(--success);
+        }
+
+        .badge-guard-inactive {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+            border: 1px solid var(--danger);
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div>
+            <h1>AI Guard</h1>
+            <p id="wa-header-status" style="font-size: 0.8rem; color: var(--muted);">Checking WhatsApp...</p>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" onclick="switchView('chat', this)">Chat</div>
+            <div class="tab" id="auth-tab-btn" onclick="switchView('auth', this)">WhatsApp Auth</div>
+            <div class="tab" onclick="switchView('logs', this)">Security Logs</div>
+        </div>
+
+        <div id="guard-badge" class="status-badge badge-guard-active">Guard Active</div>
+    </header>
+
+    <!-- Chat View -->
+    <div id="chat-view" class="view active">
+        <div id="chat-container">
+            <div class="message system" id="initial-system-msg">Initializing Secure Gateway...</div>
+        </div>
+        <div class="controls">
+            <button class="btn-outline" onclick="toggleGuard()">🛡️ Toggle Guard</button>
+            <input type="text" id="user-input" placeholder="Type a message to Gemini..."
+                onkeypress="if(event.key === 'Enter') sendMessage()">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <!-- Auth View -->
+    <div id="auth-view" class="view">
+        <div class="auth-content">
+            <div class="status-info">
+                <span id="wa-status-dot" class="status-dot dot-disconnected"></span>
+                <strong id="wa-status-text">Disconnected</strong>
+            </div>
+
+            <div id="qr-container" class="qr-card" style="display: none;">
+                <canvas id="qr-canvas"></canvas>
+                <p style="color: #0f172a; font-weight: 600; margin-top: 1rem; font-size: 0.9rem;">Scan with WhatsApp</p>
+            </div>
+
+            <div id="connected-info" style="display: none; margin-bottom: 2rem;">
+                <h2 style="margin-bottom: 1rem;">✅ WhatsApp Linked</h2>
+                <p style="opacity: 0.6;">Your session is active. You can now receive and send messages.</p>
+            </div>
+
+            <div style="display: flex; gap: 1rem;">
+                <button id="reconnect-btn" onclick="reconnect()">Reconnect</button>
+                <button id="logout-btn" class="btn-danger" style="display: none;" onclick="logout()">Logout</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Logs View -->
+    <div id="logs-view" class="view">
+        <div id="log-container" style="padding: 2rem; overflow-y: auto; font-family: monospace; font-size: 0.85rem;">
+            <div style="color: var(--muted); margin-bottom: 1rem;">Waiting for intercepted traffic...</div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const chatContainer = document.getElementById('chat-container');
+        const logContainer = document.getElementById('log-container');
+        const guardBadge = document.getElementById('guard-badge');
+        const userInput = document.getElementById('user-input');
+
+        // WhatsApp Elements
+        const waHeaderStatus = document.getElementById('wa-header-status');
+        const waStatusDot = document.getElementById('wa-status-dot');
+        const waStatusText = document.getElementById('wa-status-text');
+        const qrContainer = document.getElementById('qr-container');
+        const qrCanvas = document.getElementById('qr-canvas');
+        const connectedInfo = document.getElementById('connected-info');
+        const logoutBtn = document.getElementById('logout-btn');
+        const reconnectBtn = document.getElementById('reconnect-btn');
+        const authTabBtn = document.getElementById('auth-tab-btn');
+
+        // Socket Handlers
+        socket.on('response', (data) => appendMessage(data.text, 'ai'));
+        socket.on('blocked', (data) => appendMessage(data.text, 'ai', true));
+        socket.on('trend-log', (data) => {
+            // Real-time security logs
+            appendLog({
+                timestamp: new Date().toISOString(),
+                event: 'security_check',
+                channel: data.source || 'web',
+                prompt: data.text,
+                action: data.result.action,
+                reasons: data.result.reasons || [],
+                request: data.request,
+                result: data.result
+            });
+        });
+
+        socket.on('audit-logs', (data) => {
+            logContainer.innerHTML = '';
+            if (!data.logs || data.logs.length === 0) {
+                logContainer.innerHTML = '<div style="color: var(--muted); margin-bottom: 1rem;">No audit logs found.</div>';
+                return;
+            }
+            // Sort by timestamp to ensure chronological append
+            data.logs.forEach(log => appendLog(log));
+        });
+
+        socket.on('status', (data) => {
+            guardBadge.innerText = data.isGuardEnabled ? 'Guard Active' : 'Guard Disabled';
+            guardBadge.className = `status-badge ${data.isGuardEnabled ? 'badge-guard-active' : 'badge-guard-inactive'}`;
+
+            const statusMsg = data.isGuardEnabled
+                ? '🛡️ Secure Gateway Online. Trend Vision One monitoring active.'
+                : '⚠️ Secure Gateway Online. Trend Vision One monitoring DISABLED.';
+
+            // Update or append system message
+            const initialMsg = document.getElementById('initial-system-msg');
+            if (initialMsg) {
+                initialMsg.innerText = statusMsg;
+                initialMsg.removeAttribute('id'); // Only update the first one found
+            } else {
+                appendMessage(statusMsg, 'system');
+            }
+        });
+
+        socket.on('wa-status', (data) => {
+            console.log('WA Status:', data.status);
+            updateWAUI(data.status);
+        });
+
+        socket.on('wa-qr', (data) => {
+            qrContainer.style.display = 'block';
+            QRCode.toCanvas(qrCanvas, data.qr, { width: 250 }, (error) => {
+                if (error) console.error(error);
+            });
+        });
+
+        function updateWAUI(status) {
+            waStatusText.innerText = status.charAt(0).toUpperCase() + status.slice(1);
+            waHeaderStatus.innerText = `WhatsApp: ${status}`;
+
+            waStatusDot.className = `status-dot dot-${status}`;
+
+            if (status === 'connected') {
+                qrContainer.style.display = 'none';
+                connectedInfo.style.display = 'block';
+                logoutBtn.style.display = 'flex';
+                reconnectBtn.style.display = 'none';
+                authTabBtn.style.color = 'var(--success)';
+            } else if (status === 'connecting') {
+                connectedInfo.style.display = 'none';
+                logoutBtn.style.display = 'none';
+                reconnectBtn.style.display = 'none';
+                authTabBtn.style.color = 'var(--warning)';
+            } else {
+                connectedInfo.style.display = 'none';
+                logoutBtn.style.display = 'none';
+                reconnectBtn.style.display = 'flex';
+                authTabBtn.style.color = 'var(--danger)';
+            }
+        }
+
+        // Actions
+        function sendMessage() {
+            const text = userInput.value.trim();
+            if (!text) return;
+            appendMessage(text, 'user');
+            socket.emit('message', { text });
+            userInput.value = '';
+        }
+
+        function toggleGuard() { socket.emit('toggle-guard'); }
+        function logout() { socket.emit('wa-logout'); }
+        function reconnect() { socket.emit('wa-reconnect'); }
+
+        function switchView(view, el) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+
+            document.getElementById(`${view}-view`).classList.add('active');
+            if (el) el.classList.add('active');
+        }
+
+        function appendMessage(text, role, isBlocked = false) {
+            const div = document.createElement('div');
+            div.className = `message ${role}`;
+            if (isBlocked) div.style.borderColor = 'var(--danger)';
+            div.innerText = text;
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function appendLog(log) {
+            if (logContainer.firstElementChild && logContainer.firstElementChild.innerText === 'Waiting for intercepted traffic...') {
+                logContainer.innerHTML = '';
+            }
+
+            const div = document.createElement('div');
+            div.style.marginBottom = '1rem';
+            div.style.padding = '1rem';
+            div.style.background = 'rgba(255,255,255,0.03)';
+            div.style.borderRadius = '0.5rem';
+
+            const timestamp = new Date(log.timestamp).toLocaleTimeString();
+            let eventColor = 'var(--primary)';
+            let statusBadge = '';
+
+            if (log.event === 'security_check') {
+                const action = log.action || 'allow';
+                const isBlock = action.toLowerCase() === 'block';
+                eventColor = isBlock ? 'var(--danger)' : 'var(--success)';
+                statusBadge = `<span style="color: ${eventColor}">[${action.toUpperCase()}]</span>`;
+                div.style.borderLeft = `4px solid ${eventColor}`;
+            } else if (log.event === 'whatsapp_connection') {
+                const isOk = log.status === 'connected';
+                eventColor = isOk ? 'var(--success)' : 'var(--danger)';
+                div.style.borderLeft = `4px solid ${eventColor}`;
+            }
+
+            let content = `
+                <div style="margin-bottom: 0.5rem; font-size: 0.75rem;">
+                   <span style="color: var(--muted)">[${timestamp}]</span>
+                   <span style="color: var(--primary)">[${log.event.toUpperCase()}]</span>
+                   ${log.channel ? `<span style="color: var(--secondary)">[${log.channel}]</span>` : ''}
+                   ${statusBadge}
+                </div>`;
+
+            if (log.event === 'security_check' || log.event === 'message_received') {
+                content += `<div style="color: var(--text); font-weight: 600; margin-bottom: 0.5rem;">Prompt: "${log.prompt}"</div>`;
+                if (log.sender) content += `<div style="font-size: 0.75rem; color: var(--muted); margin-bottom: 0.5rem;">From: ${log.sender}</div>`;
+            }
+
+            if (log.event === 'security_check') {
+                if (log.reasons && log.reasons.length > 0) {
+                    content += `<div style="font-size: 0.75rem; color: var(--warning); margin-bottom: 0.5rem;">Reasons: ${log.reasons.join(', ')}</div>`;
+                }
+                if (log.result) {
+                    content += `
+                        <div style="margin-top: 0.75rem;">
+                            <details>
+                                <summary style="font-size: 0.7rem; color: var(--muted); cursor: pointer;">VIEW DETAILS</summary>
+                                <pre style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(0,0,0,0.2); border-radius: 0.25rem; opacity: 0.8; overflow-x: auto; max-height: 150px; font-size: 0.75rem;">${JSON.stringify(log.result, null, 2)}</pre>
+                            </details>
+                        </div>`;
+                }
+            } else if (log.event === 'whatsapp_connection') {
+                content += `<div style="color: var(--text);">WhatsApp Status: <span style="color: ${eventColor}">${log.status}</span></div>`;
+                if (log.reason) content += `<div style="font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem;">Reason: ${log.reason}</div>`;
+            } else if (log.event === 'guard_toggle') {
+                content += `<div style="color: var(--text);">Security Guard toggled <span style="color: ${log.enabled ? 'var(--success)' : 'var(--danger)'}">${log.enabled ? 'ON' : 'OFF'}</span></div>`;
+            }
+
+            div.innerHTML = content;
+            logContainer.prepend(div);
+        }
+    </script>
+</body>
+
+</html>
