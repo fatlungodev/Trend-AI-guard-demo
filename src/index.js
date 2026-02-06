@@ -10,6 +10,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { config } from './config.js';
 import { checkSecurity } from './services/trend-guard.js';
@@ -45,12 +46,31 @@ io.on('connection', (socket) => {
         if (sock) {
             try {
                 await sock.logout();
-            } catch (e) { }
+            } catch (e) {
+                console.error('Error during logout:', e);
+            }
             sock = null;
-            waStatus = 'disconnected';
-            qrCode = null;
-            io.emit('wa-status', { status: waStatus });
         }
+
+        // --- Remove session files ---
+        const authPath = path.join(__dirname, '../auth_session');
+        if (fs.existsSync(authPath)) {
+            try {
+                fs.rmSync(authPath, { recursive: true, force: true });
+                console.log('Session folder removed');
+            } catch (err) {
+                console.error('Error removing session folder:', err);
+            }
+        }
+
+        waStatus = 'disconnected';
+        qrCode = null;
+        io.emit('wa-status', { status: waStatus });
+        io.emit('wa-qr', { qr: null });
+
+        // Trigger fresh start to show new QR
+        console.log('Restarting WhatsApp for new login...');
+        startWhatsApp();
     });
 
     socket.on('wa-reconnect', () => {
@@ -94,13 +114,15 @@ io.on('connection', (socket) => {
                     reasons: result.response.reasons || []
                 });
 
+                io.emit('trend-log', { text, result: result.response, request: result.request || { prompt: text } });
+
                 if (result.response.action?.toLowerCase() === 'block') {
                     socket.emit('blocked', { text: '🚫 Security Violation: Blocked by Trend Vision One AI Guard.' });
                     return;
                 }
+            } else {
+                io.emit('trend-log', { text, result: result.response, request: result.request || { prompt: text } });
             }
-
-            io.emit('trend-log', { text, result: result.response, request: result.request || { prompt: text } });
 
             console.log('--- LLM Request ---');
             console.log(JSON.stringify({ prompt: text }, null, 2));
@@ -240,13 +262,19 @@ async function startWhatsApp() {
                         reasons: result.response.reasons || []
                     });
 
+                    // Emit events before potential block return
+                    io.emit('wa-comm', { role: 'user', text, sender: senderNumber });
+                    io.emit('trend-log', { text, result: result.response, request: result.request || { prompt: text }, source: 'whatsapp' });
+
                     if (result.response.action?.toLowerCase() === 'block') {
                         await sock.sendMessage(remoteJid, { text: '🚫 Blocked by Trend Vision One AI Guard.' });
+                        io.emit('wa-comm', { role: 'ai', text: '🚫 Blocked by Trend Vision One AI Guard.', sender: senderNumber });
                         continue;
                     }
+                } else {
+                    io.emit('wa-comm', { role: 'user', text, sender: senderNumber });
+                    io.emit('trend-log', { text, result: result.response, request: result.request || { prompt: text }, source: 'whatsapp' });
                 }
-
-                io.emit('trend-log', { text, result: result.response, request: result.request || { prompt: text }, source: 'whatsapp' });
 
                 console.log('--- LLM Request ---');
                 console.log(JSON.stringify({ prompt: text }, null, 2));
@@ -257,6 +285,7 @@ async function startWhatsApp() {
                 console.log(JSON.stringify({ text: response }, null, 2));
 
                 await sock.sendMessage(remoteJid, { text: response });
+                io.emit('wa-comm', { role: 'ai', text: response, sender: senderNumber });
             } catch (error) {
                 console.error('Error processing WhatsApp message:', error);
                 await sock.sendMessage(remoteJid, { text: '❌ Error processing request.' });

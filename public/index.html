@@ -346,6 +346,10 @@
         // Socket Handlers
         socket.on('response', (data) => appendMessage(data.text, 'ai'));
         socket.on('blocked', (data) => appendMessage(data.text, 'ai', true));
+        socket.on('wa-comm', (data) => {
+            const prefix = data.role === 'user' ? `[WA: ${data.sender}] ` : `[AI -> WA: ${data.sender}] `;
+            appendMessage(prefix + data.text, data.role === 'user' ? 'user' : 'ai');
+        });
         socket.on('trend-log', (data) => {
             // Real-time security logs
             appendLog({
