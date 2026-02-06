@@ -62,6 +62,8 @@ A middleware application that demonstrates integrating **Trend Vision One AI Gua
 ## 📖 Usage
 
 ### Web Interface
+![Web Console Demo](assets/demo.png)
+
 Access the dashboard at `http://localhost:3000`. This allows you to:
 - Scan the WhatsApp QR code to link the bot.
 - Chat directly with the secured AI.
@@ -69,6 +71,8 @@ Access the dashboard at `http://localhost:3000`. This allows you to:
 - View real-time security logs and LLM responses.
 
 ### WhatsApp Bot
+![WhatsApp Demo](assets/whatsapp_demo.png)
+
 Once linked, the bot will respond to messages from allowed users:
 - **Normal Chatting**: Send any prompt, and it will be processed through AI Guard and then Gemini.
 - **Commands**:
