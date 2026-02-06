@@ -1,4 +1,6 @@
-node_modules
+node_modules/
 .env
-auth_session
+auth_session/
 *.log
+audit.log
+.DS_Store

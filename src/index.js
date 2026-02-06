@@ -95,7 +95,7 @@ io.on('connection', (socket) => {
                 });
 
                 if (result.response.action?.toLowerCase() === 'block') {
-                    socket.emit('blocked', { text: '🚫 Security Violation: Blocked by Trend Vision One.' });
+                    socket.emit('blocked', { text: '🚫 Security Violation: Blocked by Trend Vision One AI Guard.' });
                     return;
                 }
             }
@@ -241,7 +241,7 @@ async function startWhatsApp() {
                     });
 
                     if (result.response.action?.toLowerCase() === 'block') {
-                        await sock.sendMessage(remoteJid, { text: '🚫 Blocked by Trend Micro.' });
+                        await sock.sendMessage(remoteJid, { text: '🚫 Blocked by Trend Vision One AI Guard.' });
                         continue;
                     }
                 }
