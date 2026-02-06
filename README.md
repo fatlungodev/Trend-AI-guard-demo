@@ -84,3 +84,5 @@ This project uses **Trend Vision One AI Guard** to check for:
 - **Prompt Injection**: Detecting attempts to jailbreak the LLM.
 - **PII Leakage**: Blocking sensitive personal information.
 - **Toxicity**: Filtering out harmful or inappropriate language.
+
+Author: Alan Leung 🇭🇰 
