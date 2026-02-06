@@ -1,5 +1,15 @@
-import axios from 'axios';
+import { fetch, ProxyAgent } from 'undici';
 import { config } from '../config.js';
+import { setGlobalDispatcher } from 'undici';
+
+// Configure proxy if available
+let dispatcher;
+const proxyUrl = config.httpsProxy || config.httpProxy;
+if (proxyUrl) {
+    dispatcher = new ProxyAgent(proxyUrl);
+    console.log(`Using proxy for Trend Guard: ${proxyUrl}`);
+    setGlobalDispatcher(dispatcher);
+}
 
 export async function checkSecurity(content) {
     if (!config.isGuardEnabled) return { action: 'allow' };
@@ -19,17 +29,24 @@ export async function checkSecurity(content) {
         console.log('--- Trend Guard HTTP Headers ---');
         console.log(JSON.stringify(headers, null, 2));
 
-        const response = await axios.post(
-            url,
-            {
-                prompt: content
-            },
-            { headers }
-        );
+        const response = await fetch(url, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ prompt: content }),
+            dispatcher
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            const error = new Error(`Request failed with status code ${response.status}`);
+            error.response = { data };
+            throw error;
+        }
 
         return {
             request: { prompt: content },
-            response: response.data
+            response: data
         };
     } catch (error) {
         console.error('Trend Vision One AI Guard Error:', error.response?.data || error.message);
