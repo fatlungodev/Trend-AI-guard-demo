@@ -1,4 +1,4 @@
-# Trend Vision One AI Guard Middleware
+# Trend Vision One AI Guard Demo
 
 A middleware application that demonstrates integrating **Trend Vision One AI Guard** with **WhatsApp** and **Google Gemini LLM**. It provides a security layer to inspect and block malicious or inappropriate prompts before they reach the LLM.
 
