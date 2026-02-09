@@ -1,14 +1,12 @@
 import { fetch, ProxyAgent } from 'undici';
 import { config } from '../config.js';
-import { setGlobalDispatcher } from 'undici';
 
 // Configure proxy if available
 let dispatcher;
-const proxyUrl = config.httpsProxy || config.httpProxy;
+const proxyUrl = config.v1Proxy;
 if (proxyUrl) {
     dispatcher = new ProxyAgent(proxyUrl);
     console.log(`Using proxy for Trend Guard: ${proxyUrl}`);
-    setGlobalDispatcher(dispatcher);
 }
 
 export async function checkSecurity(content) {

@@ -8,6 +8,6 @@ export const config = {
     appName: process.env.APP_NAME || 'whatsapp-internal-bot',
     isGuardEnabled: true, // Default state
     whatsappAllowList: (process.env.WHATSAPP_ALLOW_LIST || '').split(',').map(n => n.trim()).filter(n => n),
-    httpProxy: process.env.HTTP_PROXY,
-    httpsProxy: process.env.HTTPS_PROXY
+    geminiProxy: process.env.GEMINI_HTTPS_PROXY || process.env.GEMINI_HTTP_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY,
+    v1Proxy: process.env.V1_HTTPS_PROXY || process.env.V1_HTTP_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY
 };

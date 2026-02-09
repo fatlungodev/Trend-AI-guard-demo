@@ -1,16 +1,14 @@
 import { GoogleGenAI } from '@google/genai';
 import { config } from '../config.js';
 import { ProxyAgent } from 'undici';
-import { setGlobalDispatcher } from 'undici';
 
 // Configure proxy if available
 const httpOptions = {};
-const proxyUrl = config.httpsProxy || config.httpProxy;
+const proxyUrl = config.geminiProxy;
 if (proxyUrl) {
     const proxyAgent = new ProxyAgent(proxyUrl);
     httpOptions.fetch = (url, opts) => fetch(url, { ...opts, dispatcher: proxyAgent });
-    console.log(`Using proxy: ${proxyUrl}`);
-    setGlobalDispatcher(proxyAgent);
+    console.log(`Using proxy for Gemini: ${proxyUrl}`);
 }
 
 const client = new GoogleGenAI({
