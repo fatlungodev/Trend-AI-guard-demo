@@ -39,7 +39,7 @@ export async function getChatCompletion(textPrompt, imageData = null) {
         }
 
         // Use gemini-2.0-flash-exp for image generation support
-        const modelName = 'gemini-2.0-flash-exp';
+        const modelName = 'gemini-2.5-flash';
         console.log('--- LLM URL ---');
         console.log(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`);
 
