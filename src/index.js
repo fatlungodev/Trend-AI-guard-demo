@@ -111,7 +111,8 @@ io.on('connection', (socket) => {
                     channel: 'web',
                     prompt: text,
                     action: result.response.action,
-                    reasons: result.response.reasons || []
+                    reasons: result.response.reasons || [],
+                    result: result.response
                 });
 
                 io.emit('trend-log', { text, result: result.response, request: result.request || { prompt: text } });
@@ -264,7 +265,8 @@ async function startWhatsApp() {
                         sender: senderNumber,
                         prompt: text,
                         action: result.response.action,
-                        reasons: result.response.reasons || []
+                        reasons: result.response.reasons || [],
+                        result: result.response
                     });
 
                     // Emit events before potential block return
