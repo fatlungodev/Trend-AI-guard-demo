@@ -45,10 +45,7 @@ export async function getChatCompletion(textPrompt, imageData = null) {
 
         const response = await client.models.generateContent({
             model: modelName,
-            contents: [{ parts }],
-            config: {
-                responseModalities: ['Text', 'Image']
-            }
+            contents: [{ parts }]
         });
 
         // Parse response parts
