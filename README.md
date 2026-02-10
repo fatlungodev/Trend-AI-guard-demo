@@ -64,7 +64,7 @@ A middleware application that demonstrates integrating **Trend Vision One AI Gua
 |                 v                                           |
 |           [ Reply to User ]                                 |
 +-------------------------------------------------------------+
-
+```
 
 ## 📁 Folder Structure
 
