@@ -357,7 +357,7 @@
             <div class="controls-row">
                 <button class="btn-outline" onclick="toggleGuard()">🛡️ Toggle Guard</button>
                 <input type="file" id="image-input" accept="image/*" style="display: none;" onchange="handleImageSelect(event)">
-                <button class="image-upload-btn" onclick="document.getElementById('image-input').click()">📷</button>
+                <button class="image-upload-btn" onclick="document.getElementById('image-input').click()" style="display: none;">📷</button>
                 <input type="text" id="user-input" placeholder="Type a message to Gemini..."
                     onkeypress="if(event.key === 'Enter') sendMessage()">
                 <button onclick="sendMessage()">Send</button>
