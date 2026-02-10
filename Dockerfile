@@ -16,8 +16,8 @@ RUN git clone ${REPO_URL} .
 RUN npm install --omit=dev
 RUN npm install -g npm@11.9.0
 # Create volume mount points for persistence
-# - /app/auth_session: Stores WhatsApp session credentials
-VOLUME ["/app/auth_session"]
+# - /app/log: Stores application logs
+VOLUME ["/app/auth_session", "/app/log"]
 
 # Expose the port the app runs on
 EXPOSE 3000

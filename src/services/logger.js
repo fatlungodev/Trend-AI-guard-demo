@@ -3,7 +3,13 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const LOG_FILE = path.join(__dirname, '../audit.log');
+const LOG_DIR = path.join(__dirname, '../../log');
+const LOG_FILE = path.join(LOG_DIR, 'audit.log');
+
+// Ensure log directory exists
+if (!fs.existsSync(LOG_DIR)) {
+    fs.mkdirSync(LOG_DIR, { recursive: true });
+}
 
 export function logAudit(event, data) {
     const logEntry = {

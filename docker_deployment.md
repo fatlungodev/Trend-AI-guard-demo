@@ -13,6 +13,7 @@ docker build -t trend-ai-guard .
 bash
 cp .env_example .env
 mkdir auth_session
+mkdir log
 ```
 
 #3. Run the container: You must provide the .env file at runtime since it's no longer being copied into the image (a security best practice).
@@ -22,6 +23,7 @@ docker run -d \
   --name ai-guard \
   -p 3000:3000 \
   -v $(pwd)/auth_session:/app/auth_session \
+  -v $(pwd)/log:/app/log \
   --env-file .env \
   trend-ai-guard
 ```
