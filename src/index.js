@@ -210,6 +210,24 @@ async function startWhatsApp() {
             const senderNumber = remoteJid.split('@')[0];
             if (config.whatsappAllowList.length > 0 && !config.whatsappAllowList.includes(senderNumber)) {
                 console.log(`--- Skipping message from non-allowlisted number: ${senderNumber} ---`);
+
+                logAudit('message_blocked', {
+                    channel: 'whatsapp',
+                    sender: senderNumber,
+                    reason: 'allowlist_restriction',
+                    prompt: text
+                });
+
+                io.emit('trend-log', {
+                    text,
+                    result: {
+                        action: 'block',
+                        reasons: [`Sender ${senderNumber} is not in the allowlist`]
+                    },
+                    request: { prompt: text },
+                    source: 'whatsapp'
+                });
+
                 continue;
             }
 
