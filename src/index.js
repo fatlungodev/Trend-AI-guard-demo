@@ -202,6 +202,9 @@ async function startWhatsApp() {
     sock.ev.on('messages.upsert', async (m) => {
         if (m.type !== 'notify') return;
         for (const msg of m.messages) {
+            console.log('--- Raw WhatsApp Message ---');
+            console.log(JSON.stringify(msg, null, 2));
+
             if (!msg.message || msg.key.fromMe) continue;
             const remoteJid = msg.key.remoteJid;
             const text = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
