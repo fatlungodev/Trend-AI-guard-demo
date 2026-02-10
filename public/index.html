@@ -484,6 +484,9 @@
                 const isOk = log.status === 'connected';
                 eventColor = isOk ? 'var(--success)' : 'var(--danger)';
                 div.style.borderLeft = `4px solid ${eventColor}`;
+            } else if (log.event === 'message_blocked') {
+                eventColor = 'var(--danger)';
+                div.style.borderLeft = `4px solid ${eventColor}`;
             }
 
             let content = `
@@ -494,8 +497,8 @@
                    ${statusBadge}
                 </div>`;
 
-            if (log.event === 'security_check' || log.event === 'message_received') {
-                content += `<div style="color: var(--text); font-weight: 600; margin-bottom: 0.5rem;">Prompt: "${log.prompt}"</div>`;
+            if (log.event === 'security_check' || log.event === 'message_received' || log.event === 'message_blocked') {
+                if (log.prompt) content += `<div style="color: var(--text); font-weight: 600; margin-bottom: 0.5rem;">Prompt: "${log.prompt}"</div>`;
                 if (log.sender) content += `<div style="font-size: 0.75rem; color: var(--muted); margin-bottom: 0.5rem;">From: ${log.sender}</div>`;
             }
 
