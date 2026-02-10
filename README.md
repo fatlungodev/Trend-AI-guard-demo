@@ -7,39 +7,47 @@ A middleware application that demonstrates integrating **Trend Vision One AI Gua
 - **WhatsApp Integration**: Turn any WhatsApp account into a secured AI bot.
 - **Trend Vision One AI Guard**: Real-time security scanning for PII, prompt injection, and toxic content.
 - **Web Dashboard**: Monitor real-time logs, audit trails, and toggle security settings.
-- **Gemini LLM**: Powered by Google's latest generative models.
+- **Gemini LLM**: Powered by Google's latest generative models with smart routing.
+- **Image Generation**: Automatic intent detection routes image requests to Gemini Image model.
+- **Image Analysis**: Upload images via WhatsApp for AI-powered analysis.
+- **Session Memory**: Optional conversation memory (last 30 messages) per user/channel.
+- **Per-User Settings**: Each WhatsApp user has independent Guard and Session settings.
 - **Audit Logging**: Local persistence of all security decisions and interactions.
 
 ## 🤖 Logic Flow
 
 ```text
 +-------------------------------------------------------------+
-|                      WhatsApp User                          |
+|                   User (WhatsApp / Web)                     |
 +------------------------------+------------------------------+
                                |
                                v
 +------------------------------+------------------------------+
-|                WhatsApp Gateway (Baileys)                   |
+|              WhatsApp Gateway / Web Socket                  |
 +------------------------------+------------------------------+
                                |
                                v
 +-------------------------------------------------------------+
-| msg.upsert (src/index.js)                                   |
+| Message Handler (src/index.js)                              |
 |                                                             |
-|   1. Whitelist Check                                        |
+|   1. Whitelist Check (WhatsApp only)                        |
 |      (Is sender in config.whatsappAllowList?)               |
 |            |                                                |
 |            +----(No)-----> [ STOP & IGNORE ]                |
 |            |                                                |
 |            v                                                |
 |   2. Command Check                                          |
-|      (/guard on | /guard off)                               |
+|      /guard on|off, /session on|off|clear                   |
 |            |                                                |
 |            +----(Yes)----> [ TOGGLE & REPLY ]               |
 |            |                                                |
 |            v                                                |
-|   3. Guard Enabled?                                         |
-|      (config.isGuardEnabled)                                |
+|   3. Image Message?                                         |
+|            |                                                |
+|            +----(Yes)----> [ SKIP GUARD, ANALYZE IMAGE ]    |
+|            |                                                |
+|            v                                                |
+|   4. Guard Enabled? (per-user setting)                      |
 |            |                                                |
 |            +----(No)----------------------+                 |
 |            |                              |                 |
@@ -53,15 +61,21 @@ A middleware application that demonstrates integrating **Trend Vision One AI Gua
 |     BLOCK     ALLOW                       |                 |
 |       |         |                         |                 |
 |       v         +-------------------------+                 |
-|  [ REPLY ]      |                                           |
-|  [ BLOCKED ]    v                                           |
-|           [ Gemini AI ]                                     |
-|           (Google GenAI)                                    |
-|                 |                                           |
+|  [ BLOCKED ]    |                                           |
 |                 v                                           |
-|           [ Generated Text ]                                |
-|                 |                                           |
-|                 v                                           |
+|         [ Smart Router ]                                    |
+|         (Intent Detection)                                  |
+|            /         \                                      |
+|        TEXT          IMAGE                                  |
+|          |             |                                    |
+|          v             v                                    |
+|   [ Gemini Text ]  [ Gemini Image ]                         |
+|   (gemini-3-flash) (gemini-3-pro-image)                     |
+|          |             |                                    |
+|          v             v                                    |
+|   [ Text Response ] [ Image + Text ]                        |
+|                 \     /                                     |
+|                  v   v                                      |
 |           [ Reply to User ]                                 |
 +-------------------------------------------------------------+
 ```
@@ -104,11 +118,22 @@ A middleware application that demonstrates integrating **Trend Vision One AI Gua
    ```bash
    cp .env_example .env
    ```
-   Required variables:
-   - `GEMINI_API_KEY`: Your Google Gemini API key.
-   - `V1_API_KEY`: Your Trend Vision One API key.
-   - `V1_BASE_URL`: The region-specific API endpoint for Trend Vision One.
-   - `WHATSAPP_ALLOW_LIST`: (Optional) Comma-separated phone numbers that can interact with the bot.
+   
+   **Required variables:**
+   | Variable | Description |
+   |----------|-------------|
+   | `GEMINI_API_KEY` | Your Google Gemini API key |
+   | `V1_API_KEY` | Your Trend Vision One API key |
+   | `V1_BASE_URL` | Region-specific API endpoint for Trend Vision One |
+   
+   **Optional variables:**
+   | Variable | Default | Description |
+   |----------|---------|-------------|
+   | `WHATSAPP_ALLOW_LIST` | (empty) | Comma-separated phone numbers that can interact with the bot |
+   | `GEMINI_TEXT_MODEL` | `gemini-3-flash-preview` | Model for text conversations |
+   | `GEMINI_IMAGE_MODEL` | `gemini-3-pro-image-preview` | Model for image generation |
+   | `GEMINI_HTTPS_PROXY` | (none) | Proxy for Gemini API (for blocked regions) |
+   | `V1_HTTPS_PROXY` | (none) | Proxy for Trend Vision One API |
 
 3. **Start the Application**:
    ```bash
@@ -123,7 +148,8 @@ A middleware application that demonstrates integrating **Trend Vision One AI Gua
 Access the dashboard at `http://localhost:3000`. This allows you to:
 - Scan the WhatsApp QR code to link the bot.
 - Chat directly with the secured AI.
-- Toggle **AI Guard** on/off.
+- Toggle **AI Guard** on/off (Web only).
+- Toggle **Session Memory** on/off (Web only).
 - View real-time security logs and LLM responses.
 
 ### WhatsApp Bot
@@ -131,14 +157,46 @@ Access the dashboard at `http://localhost:3000`. This allows you to:
 
 Once linked, the bot will respond to messages from allowed users:
 - **Normal Chatting**: Send any prompt, and it will be processed through AI Guard and then Gemini.
-- **Commands**:
-  - `/guard on`: Enables security filtering via Trend Vision One.
-  - `/guard off`: Disables security filtering (Bypass mode).
+- **Image Analysis**: Send an image with optional caption for AI analysis (bypasses Guard).
+- **Image Generation**: Ask to "draw", "generate", or "create" an image, and the AI will generate one.
+
+**Commands (per-user settings):**
+
+| Command | Description |
+|---------|-------------|
+| `/guard on` | Enable AI Guard security filtering for your number |
+| `/guard off` | Disable AI Guard (bypass mode) for your number |
+| `/session on` | Enable conversation memory (last 30 messages) |
+| `/session off` | Disable conversation memory |
+| `/session clear` | Clear conversation history but keep session enabled |
 
 ## 🛡️ Security
 This project uses **Trend Vision One AI Guard** to check for:
 - **Prompt Injection**: Detecting attempts to jailbreak the LLM.
 - **PII Leakage**: Blocking sensitive personal information.
 - **Toxicity**: Filtering out harmful or inappropriate language.
+
+> **Note**: Image messages bypass AI Guard security checks as the Guard API currently only supports text content.
+
+## 🧠 Smart Routing
+
+The application uses intelligent intent detection to route requests:
+
+| User Intent | Detection | Model Used |
+|-------------|-----------|------------|
+| Text conversation | Default | `GEMINI_TEXT_MODEL` |
+| Image generation | Keywords: draw, generate, create, paint... | `GEMINI_IMAGE_MODEL` |
+| Image analysis | User sends an image | `GEMINI_TEXT_MODEL` |
+
+When image generation is detected, the system:
+1. Sends a "generating..." message immediately
+2. Calls the image model asynchronously
+3. Returns both text description and generated image
+
+## 📝 Changelog
+
+- **Feb 2026**: Added image generation, image analysis, session memory, per-user settings
+
+---
 
 Author: Alan Leung 🇭🇰  6-Feb-2026

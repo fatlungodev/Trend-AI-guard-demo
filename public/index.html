@@ -341,7 +341,10 @@
             <div class="tab" onclick="switchView('logs', this)">Security Logs</div>
         </div>
 
-        <div id="guard-badge" class="status-badge badge-guard-active">Guard Active</div>
+        <div style="display: flex; gap: 0.5rem;">
+            <div id="guard-badge" class="status-badge badge-guard-active">Guard Active</div>
+            <div id="session-badge" class="status-badge badge-guard-inactive">Session Off</div>
+        </div>
     </header>
 
     <!-- Chat View -->
@@ -355,7 +358,8 @@
                 <button class="image-preview-remove" onclick="clearImage()">x</button>
             </div>
             <div class="controls-row">
-                <button class="btn-outline" onclick="toggleGuard()">🛡️ Toggle Guard</button>
+                <button class="btn-outline" onclick="toggleGuard()">🛡️ Guard</button>
+                <button class="btn-outline" onclick="toggleSession()">🧠 Session</button>
                 <input type="file" id="image-input" accept="image/*" style="display: none;" onchange="handleImageSelect(event)">
                 <button class="image-upload-btn" onclick="document.getElementById('image-input').click()" style="display: none;">📷</button>
                 <input type="text" id="user-input" placeholder="Type a message to Gemini..."
@@ -455,9 +459,14 @@
             data.logs.forEach(log => appendLog(log));
         });
 
+        const sessionBadge = document.getElementById('session-badge');
+
         socket.on('status', (data) => {
             guardBadge.innerText = data.isGuardEnabled ? 'Guard Active' : 'Guard Disabled';
             guardBadge.className = `status-badge ${data.isGuardEnabled ? 'badge-guard-active' : 'badge-guard-inactive'}`;
+
+            sessionBadge.innerText = data.isSessionEnabled ? 'Session On' : 'Session Off';
+            sessionBadge.className = `status-badge ${data.isSessionEnabled ? 'badge-guard-active' : 'badge-guard-inactive'}`;
 
             const statusMsg = data.isGuardEnabled
                 ? '🛡️ Secure Gateway Online. Trend Vision One monitoring active.'
@@ -558,6 +567,7 @@
         }
 
         function toggleGuard() { socket.emit('toggle-guard'); }
+        function toggleSession() { socket.emit('toggle-session'); }
         function logout() { socket.emit('wa-logout'); }
         function reconnect() { socket.emit('wa-reconnect'); }
 
@@ -654,7 +664,13 @@
                 content += `<div style="color: var(--text);">WhatsApp Status: <span style="color: ${eventColor}">${log.status}</span></div>`;
                 if (log.reason) content += `<div style="font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem;">Reason: ${log.reason}</div>`;
             } else if (log.event === 'guard_toggle') {
+                const source = log.source === 'web_ui' ? 'Web' : (log.sender || 'Unknown');
                 content += `<div style="color: var(--text);">Security Guard toggled <span style="color: ${log.enabled ? 'var(--success)' : 'var(--danger)'}">${log.enabled ? 'ON' : 'OFF'}</span></div>`;
+                content += `<div style="font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem;">Source: ${source}</div>`;
+            } else if (log.event === 'session_toggle') {
+                const source = log.source === 'web_ui' ? 'Web' : (log.sender || 'Unknown');
+                content += `<div style="color: var(--text);">Session Memory toggled <span style="color: ${log.enabled ? 'var(--success)' : 'var(--danger)'}">${log.enabled ? 'ON' : 'OFF'}</span></div>`;
+                content += `<div style="font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem;">Source: ${source}</div>`;
             }
 
             div.innerHTML = content;

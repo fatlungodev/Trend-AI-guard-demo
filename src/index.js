@@ -25,6 +25,71 @@ let sock = null;
 let qrCode = null;
 let waStatus = 'disconnected'; // disconnected, connecting, connected
 
+// --- Web Settings (separate from WhatsApp) ---
+let webGuardEnabled = true;
+let webSessionEnabled = false;
+const webSessionHistory = []; // Web session history
+
+// --- Per-Mobile Settings (WhatsApp only) ---
+// Stores settings for each mobile number
+// Format: { mobileNumber: { sessionEnabled: boolean, guardEnabled: boolean, history: [{role, text}] } }
+const mobileSettings = new Map();
+const MAX_HISTORY_LENGTH = 30; // Max messages to keep per session
+
+/**
+ * Get or create settings for a mobile number
+ * guardEnabled defaults to true for WhatsApp
+ */
+function getMobileSettings(mobileNumber) {
+    if (!mobileSettings.has(mobileNumber)) {
+        mobileSettings.set(mobileNumber, { 
+            sessionEnabled: false, 
+            guardEnabled: true, // Default ON for WhatsApp
+            history: [] 
+        });
+    }
+    return mobileSettings.get(mobileNumber);
+}
+
+/**
+ * Check if guard is enabled for a mobile number
+ */
+function isGuardEnabledFor(mobileNumber) {
+    const settings = getMobileSettings(mobileNumber);
+    return settings.guardEnabled;
+}
+
+/**
+ * Add message to session history
+ */
+function addToHistory(mobileNumber, role, text) {
+    const settings = getMobileSettings(mobileNumber);
+    if (!settings.sessionEnabled) return;
+    
+    settings.history.push({ role, text });
+    
+    // Keep only last MAX_HISTORY_LENGTH messages
+    if (settings.history.length > MAX_HISTORY_LENGTH) {
+        settings.history = settings.history.slice(-MAX_HISTORY_LENGTH);
+    }
+}
+
+/**
+ * Get history for LLM call (only if session enabled)
+ */
+function getHistory(mobileNumber) {
+    const settings = getMobileSettings(mobileNumber);
+    return settings.sessionEnabled ? settings.history : null;
+}
+
+/**
+ * Clear session history
+ */
+function clearHistory(mobileNumber) {
+    const settings = getMobileSettings(mobileNumber);
+    settings.history = [];
+}
+
 // --- Express & Socket.io Setup ---
 const app = express();
 const httpServer = createServer(app);
@@ -34,7 +99,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 io.on('connection', (socket) => {
     console.log('Web client connected');
-    socket.emit('status', { isGuardEnabled: config.isGuardEnabled });
+    socket.emit('status', { isGuardEnabled: webGuardEnabled, isSessionEnabled: webSessionEnabled });
     socket.emit('wa-status', { status: waStatus });
     if (qrCode) socket.emit('wa-qr', { qr: qrCode });
 
@@ -81,12 +146,24 @@ io.on('connection', (socket) => {
     });
 
     socket.on('toggle-guard', () => {
-        config.isGuardEnabled = !config.isGuardEnabled;
+        webGuardEnabled = !webGuardEnabled;
         logAudit('guard_toggle', {
-            enabled: config.isGuardEnabled,
+            enabled: webGuardEnabled,
             source: 'web_ui'
         });
-        io.emit('status', { isGuardEnabled: config.isGuardEnabled });
+        io.emit('status', { isGuardEnabled: webGuardEnabled, isSessionEnabled: webSessionEnabled });
+    });
+
+    socket.on('toggle-session', () => {
+        webSessionEnabled = !webSessionEnabled;
+        if (!webSessionEnabled) {
+            webSessionHistory.length = 0; // Clear history when disabled
+        }
+        logAudit('session_toggle', {
+            enabled: webSessionEnabled,
+            source: 'web_ui'
+        });
+        io.emit('status', { isGuardEnabled: webGuardEnabled, isSessionEnabled: webSessionEnabled });
     });
 
     socket.on('message', async (data) => {
@@ -103,8 +180,8 @@ io.on('connection', (socket) => {
 
             let result = { response: { action: 'allow' } };
 
-            // Skip Trend Guard for image messages
-            if (config.isGuardEnabled && !hasImage && text) {
+            // Skip Trend Guard for image messages (Web uses webGuardEnabled)
+            if (webGuardEnabled && !hasImage && text) {
                 console.log('--- Trend Guard Request ---');
                 console.log(JSON.stringify({ prompt: text }, null, 2));
 
@@ -132,16 +209,33 @@ io.on('connection', (socket) => {
             }
 
             console.log('--- LLM Request ---');
-            console.log(JSON.stringify({ prompt: text, hasImage }, null, 2));
+            const webHistory = webSessionEnabled ? webSessionHistory : null;
+            console.log(JSON.stringify({ prompt: text, hasImage, historyLength: webHistory ? webHistory.length : 0 }, null, 2));
 
-            const response = await getChatCompletion(text, image);
+            // Callback for when image generation starts
+            const onPendingImage = () => {
+                socket.emit('response', { text: '🎨 正在為您生成圖片，請稍候...', isPending: true });
+            };
+
+            const response = await getChatCompletion(text, image, webHistory, onPendingImage);
 
             console.log('--- LLM Response ---');
-            console.log(JSON.stringify({ text: response.text, hasImage: !!response.image }, null, 2));
+            console.log(JSON.stringify({ text: response.text, hasImage: !!response.image, isImageGeneration: response.isImageGeneration }, null, 2));
+
+            // Update web session history
+            if (webSessionEnabled) {
+                webSessionHistory.push({ role: 'user', text: text || '[Image]' });
+                webSessionHistory.push({ role: 'model', text: response.text || '[Image Response]' });
+                // Keep only last MAX_HISTORY_LENGTH messages
+                while (webSessionHistory.length > MAX_HISTORY_LENGTH) {
+                    webSessionHistory.shift();
+                }
+            }
 
             socket.emit('response', { 
                 text: response.text,
-                image: response.image || null // { mimeType, data }
+                image: response.image || null, // { mimeType, data }
+                isImageGeneration: response.isImageGeneration || false
             });
         } catch (error) {
             console.error('Error in message handler:', error);
@@ -265,26 +359,59 @@ async function startWhatsApp() {
                 continue;
             }
 
+            // --- Per-Mobile Guard Commands ---
             if (text.toLowerCase() === '/guard on') {
-                config.isGuardEnabled = true;
+                const settings = getMobileSettings(effectiveSender);
+                settings.guardEnabled = true;
                 logAudit('guard_toggle', {
+                    enabled: true,
+                    source: 'whatsapp',
+                    sender: effectiveSender,
+                    scope: 'per_mobile'
+                });
+                await sock.sendMessage(remoteJid, { text: '🛡️ AI Guard: ENABLED (for this number)' });
+                continue;
+            }
+            if (text.toLowerCase() === '/guard off') {
+                const settings = getMobileSettings(effectiveSender);
+                settings.guardEnabled = false;
+                logAudit('guard_toggle', {
+                    enabled: false,
+                    source: 'whatsapp',
+                    sender: effectiveSender,
+                    scope: 'per_mobile'
+                });
+                await sock.sendMessage(remoteJid, { text: '⚠️ AI Guard: DISABLED (for this number)' });
+                continue;
+            }
+            // --- Per-Mobile Session Memory Commands ---
+            if (text.toLowerCase() === '/session on') {
+                const settings = getMobileSettings(effectiveSender);
+                settings.sessionEnabled = true;
+                clearHistory(effectiveSender);
+                logAudit('session_toggle', {
                     enabled: true,
                     source: 'whatsapp',
                     sender: effectiveSender
                 });
-                io.emit('status', { isGuardEnabled: true });
-                await sock.sendMessage(remoteJid, { text: '🛡️ AI Guard: ENABLED' });
+                await sock.sendMessage(remoteJid, { text: '🧠 Session Memory: ENABLED (last 30 messages)' });
                 continue;
             }
-            if (text.toLowerCase() === '/guard off') {
-                config.isGuardEnabled = false;
-                logAudit('guard_toggle', {
+            if (text.toLowerCase() === '/session off') {
+                const settings = getMobileSettings(effectiveSender);
+                settings.sessionEnabled = false;
+                clearHistory(effectiveSender);
+                logAudit('session_toggle', {
                     enabled: false,
                     source: 'whatsapp',
                     sender: effectiveSender
                 });
-                io.emit('status', { isGuardEnabled: false });
-                await sock.sendMessage(remoteJid, { text: '⚠️ AI Guard: DISABLED' });
+                await sock.sendMessage(remoteJid, { text: '🧠 Session Memory: DISABLED' });
+                continue;
+            }
+            if (text.toLowerCase() === '/session clear') {
+                clearHistory(effectiveSender);
+                await sock.sendMessage(remoteJid, { text: '🧠 Session Memory: CLEARED' });
                 continue;
             }
 
@@ -316,7 +443,9 @@ async function startWhatsApp() {
                 let result = { response: { action: 'allow' } };
 
                 // Skip Trend Guard for image messages
-                if (config.isGuardEnabled && !hasImage && text) {
+                // Use per-mobile guard setting (falls back to global if not set)
+                const guardEnabled = isGuardEnabledFor(effectiveSender);
+                if (guardEnabled && !hasImage && text) {
                     console.log(`--- Trend Guard Request (WhatsApp: ${effectiveSender}) ---`);
                     console.log(JSON.stringify({ prompt: text }, null, 2));
 
@@ -349,15 +478,29 @@ async function startWhatsApp() {
                 }
 
                 console.log('--- LLM Request ---');
-                console.log(JSON.stringify({ prompt: text || '[Image]', hasImage }, null, 2));
+                const history = getHistory(effectiveSender);
+                console.log(JSON.stringify({ prompt: text || '[Image]', hasImage, historyLength: history ? history.length : 0 }, null, 2));
 
-                const response = await getChatCompletion(text || 'Describe this image', imageData);
+                // Callback for when image generation starts
+                const onPendingImage = async () => {
+                    await sock.sendMessage(remoteJid, { text: '🎨 正在為您生成圖片，請稍候...' });
+                    io.emit('wa-comm', { role: 'ai', text: '🎨 正在為您生成圖片，請稍候...', sender: effectiveSender });
+                };
+
+                const response = await getChatCompletion(text || 'Describe this image', imageData, history, onPendingImage);
 
                 console.log('--- LLM Response ---');
-                console.log(JSON.stringify({ text: response.text, hasImage: !!response.image }, null, 2));
+                console.log(JSON.stringify({ text: response.text, hasImage: !!response.image, isImageGeneration: response.isImageGeneration }, null, 2));
 
-                // Send text response
-                if (response.text) {
+                // Update session history with user message and AI response
+                addToHistory(effectiveSender, 'user', text || '[Image]');
+                addToHistory(effectiveSender, 'model', response.text || '[Image Response]');
+
+                // Send text response (skip if it was an image generation and we already sent pending message)
+                if (response.text && !response.isImageGeneration) {
+                    await sock.sendMessage(remoteJid, { text: response.text });
+                } else if (response.text && response.isImageGeneration) {
+                    // For image generation, send the accompanying text if any
                     await sock.sendMessage(remoteJid, { text: response.text });
                 }
 
