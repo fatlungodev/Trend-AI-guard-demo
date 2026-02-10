@@ -39,9 +39,7 @@ io.on('connection', (socket) => {
 
     // Send historical logs
     getAuditLogs().then(logs => {
-        // Filter out whitelist blocks from UI
-        const filteredLogs = logs.filter(log => log.event !== 'message_blocked');
-        socket.emit('audit-logs', { logs: filteredLogs });
+        socket.emit('audit-logs', { logs });
     });
 
     socket.on('wa-logout', async () => {
@@ -212,6 +210,11 @@ async function startWhatsApp() {
             const senderNumber = remoteJid.split('@')[0];
             if (config.whatsappAllowList.length > 0 && !config.whatsappAllowList.includes(senderNumber)) {
                 console.log(`--- Skipping message from non-allowlisted number: ${senderNumber} ---`);
+                logAudit('message_blocked', {
+                    channel: 'whatsapp',
+                    sender: senderNumber,
+                    reason: 'not_in_allowlist'
+                });
                 continue;
             }
 
