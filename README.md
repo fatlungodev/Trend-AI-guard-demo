@@ -10,7 +10,7 @@ A middleware application that demonstrates integrating **Trend Vision One AI Gua
 - **Gemini LLM**: Powered by Google's latest generative models.
 - **Audit Logging**: Local persistence of all security decisions and interactions.
 
-## Logic Flow
+## 🤖 Logic Flow
 
 +-------------------------------------------------------------+
 |                      WhatsApp User                          |
