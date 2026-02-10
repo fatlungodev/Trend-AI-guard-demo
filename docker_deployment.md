@@ -1,4 +1,4 @@
-#Updated Build & Run Commands
+#Docker Deployment by dockerfile
 
 #1. Build the image:
 ```text
@@ -8,7 +8,14 @@ docker build -t trend-ai-guard .
 # docker build --build-arg REPO_URL=https://github.com/your-fork/repo.git -t trend-ai-guard .
 ```
 
-#2. Run the container: You must provide the .env file at runtime since it's no longer being copied into the image (a security best practice).
+#2 Prepare enviroment file and create auth_session folder
+```text
+bash
+cp .env_example .env
+mkdir auth_session
+```
+
+#3. Run the container: You must provide the .env file at runtime since it's no longer being copied into the image (a security best practice).
 ```text
 bash
 docker run -d \

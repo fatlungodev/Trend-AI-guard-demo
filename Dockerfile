@@ -13,8 +13,8 @@ ARG REPO_URL=https://github.com/fatlungodev/Trend-AI-guard-demo.git
 RUN git clone ${REPO_URL} .
 
 # Install production dependencies
-RUN npm ci --only=production
-
+RUN npm install --omit=dev
+RUN npm install -g npm@11.9.0
 # Create volume mount points for persistence
 # - /app/auth_session: Stores WhatsApp session credentials
 VOLUME ["/app/auth_session"]
