@@ -240,6 +240,71 @@
             color: white;
         }
 
+        /* Image upload styles */
+        .image-upload-btn {
+            background: var(--card);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: var(--text);
+            padding: 0.75rem;
+            cursor: pointer;
+        }
+
+        .image-upload-btn:hover {
+            border-color: var(--primary);
+        }
+
+        .image-preview-container {
+            position: relative;
+            display: none;
+            margin-bottom: 0.5rem;
+        }
+
+        .image-preview {
+            max-width: 200px;
+            max-height: 150px;
+            border-radius: 0.5rem;
+            object-fit: cover;
+        }
+
+        .image-preview-remove {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: var(--danger);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+        }
+
+        .message-image {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .controls-wrapper {
+            display: flex;
+            flex-direction: column;
+            padding: 1rem 2rem;
+            background: var(--bg);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .controls-row {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
         .status-badge {
             padding: 0.4rem 0.8rem;
             border-radius: 999px;
@@ -284,11 +349,19 @@
         <div id="chat-container">
             <div class="message system" id="initial-system-msg">Initializing Secure Gateway...</div>
         </div>
-        <div class="controls">
-            <button class="btn-outline" onclick="toggleGuard()">🛡️ Toggle Guard</button>
-            <input type="text" id="user-input" placeholder="Type a message to Gemini..."
-                onkeypress="if(event.key === 'Enter') sendMessage()">
-            <button onclick="sendMessage()">Send</button>
+        <div class="controls-wrapper">
+            <div class="image-preview-container" id="image-preview-container">
+                <img id="image-preview" class="image-preview" src="" alt="Preview">
+                <button class="image-preview-remove" onclick="clearImage()">x</button>
+            </div>
+            <div class="controls-row">
+                <button class="btn-outline" onclick="toggleGuard()">🛡️ Toggle Guard</button>
+                <input type="file" id="image-input" accept="image/*" style="display: none;" onchange="handleImageSelect(event)">
+                <button class="image-upload-btn" onclick="document.getElementById('image-input').click()">📷</button>
+                <input type="text" id="user-input" placeholder="Type a message to Gemini..."
+                    onkeypress="if(event.key === 'Enter') sendMessage()">
+                <button onclick="sendMessage()">Send</button>
+            </div>
         </div>
     </div>
 
@@ -343,8 +416,16 @@
         const reconnectBtn = document.getElementById('reconnect-btn');
         const authTabBtn = document.getElementById('auth-tab-btn');
 
+        // Image upload state
+        let selectedImage = null; // { mimeType: string, data: string }
+        const imagePreviewContainer = document.getElementById('image-preview-container');
+        const imagePreview = document.getElementById('image-preview');
+        const imageInput = document.getElementById('image-input');
+
         // Socket Handlers
-        socket.on('response', (data) => appendMessage(data.text, 'ai'));
+        socket.on('response', (data) => {
+            appendMessage(data.text, 'ai', false, data.image);
+        });
         socket.on('blocked', (data) => appendMessage(data.text, 'ai', true));
         socket.on('wa-comm', (data) => {
             const prefix = data.role === 'user' ? `[WA: ${data.sender}] ` : `[AI -> WA: ${data.sender}] `;
@@ -429,13 +510,51 @@
             }
         }
 
+        // Image handling
+        function handleImageSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const dataUrl = e.target.result;
+                const base64 = dataUrl.split(',')[1];
+                selectedImage = {
+                    mimeType: file.type,
+                    data: base64
+                };
+                imagePreview.src = dataUrl;
+                imagePreviewContainer.style.display = 'inline-block';
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function clearImage() {
+            selectedImage = null;
+            imagePreview.src = '';
+            imagePreviewContainer.style.display = 'none';
+            imageInput.value = '';
+        }
+
         // Actions
         function sendMessage() {
             const text = userInput.value.trim();
-            if (!text) return;
-            appendMessage(text, 'user');
-            socket.emit('message', { text });
+            if (!text && !selectedImage) return;
+            
+            // Show user message with image preview if any
+            if (selectedImage) {
+                appendMessage(text || '[Image]', 'user', false, selectedImage);
+            } else {
+                appendMessage(text, 'user');
+            }
+            
+            socket.emit('message', { 
+                text, 
+                image: selectedImage 
+            });
+            
             userInput.value = '';
+            clearImage();
         }
 
         function toggleGuard() { socket.emit('toggle-guard'); }
@@ -450,11 +569,27 @@
             if (el) el.classList.add('active');
         }
 
-        function appendMessage(text, role, isBlocked = false) {
+        function appendMessage(text, role, isBlocked = false, image = null) {
             const div = document.createElement('div');
             div.className = `message ${role}`;
             if (isBlocked) div.style.borderColor = 'var(--danger)';
-            div.innerText = text;
+            
+            // Add text content
+            if (text) {
+                const textSpan = document.createElement('span');
+                textSpan.innerText = text;
+                div.appendChild(textSpan);
+            }
+            
+            // Add image if present
+            if (image && image.data) {
+                const img = document.createElement('img');
+                img.src = `data:${image.mimeType};base64,${image.data}`;
+                img.className = 'message-image';
+                img.alt = 'Image';
+                div.appendChild(img);
+            }
+            
             chatContainer.appendChild(div);
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }

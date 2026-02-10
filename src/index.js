@@ -2,7 +2,8 @@ import {
     makeWASocket,
     useMultiFileAuthState,
     DisconnectReason,
-    fetchLatestBaileysVersion
+    fetchLatestBaileysVersion,
+    downloadMediaMessage
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import { Boom } from '@hapi/boom';
@@ -89,16 +90,21 @@ io.on('connection', (socket) => {
     });
 
     socket.on('message', async (data) => {
-        const text = data.text;
+        const text = data.text || '';
+        const image = data.image || null; // { mimeType: string, data: string (base64) }
+        const hasImage = !!image;
+
         try {
             logAudit('message_received', {
                 channel: 'web',
-                prompt: text
+                prompt: text,
+                hasImage
             });
 
             let result = { response: { action: 'allow' } };
 
-            if (config.isGuardEnabled) {
+            // Skip Trend Guard for image messages
+            if (config.isGuardEnabled && !hasImage && text) {
                 console.log('--- Trend Guard Request ---');
                 console.log(JSON.stringify({ prompt: text }, null, 2));
 
@@ -122,18 +128,21 @@ io.on('connection', (socket) => {
                     return;
                 }
             } else {
-                io.emit('trend-log', { text, result: result.response, request: result.request || { prompt: text } });
+                io.emit('trend-log', { text: text || '[Image]', result: result.response, request: result.request || { prompt: text || '[Image]' } });
             }
 
             console.log('--- LLM Request ---');
-            console.log(JSON.stringify({ prompt: text }, null, 2));
+            console.log(JSON.stringify({ prompt: text, hasImage }, null, 2));
 
-            const response = await getChatCompletion(text);
+            const response = await getChatCompletion(text, image);
 
             console.log('--- LLM Response ---');
-            console.log(JSON.stringify({ text: response }, null, 2));
+            console.log(JSON.stringify({ text: response.text, hasImage: !!response.image }, null, 2));
 
-            socket.emit('response', { text: response });
+            socket.emit('response', { 
+                text: response.text,
+                image: response.image || null // { mimeType, data }
+            });
         } catch (error) {
             console.error('Error in message handler:', error);
             socket.emit('response', { text: '❌ Error: ' + error.message });
@@ -222,8 +231,18 @@ async function startWhatsApp() {
             // The effective sender for logging/logic is the first non-null mobile number found
             const effectiveSender = senderNumber || senderNumberAlt;
 
-            const text = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
-            if (!text) continue;
+            // --- Check for image message ---
+            const imageMessage = msg.message.imageMessage;
+            const hasImage = !!imageMessage;
+            
+            // Get text from conversation, extended text, or image caption
+            const text = msg.message.conversation || 
+                         msg.message.extendedTextMessage?.text || 
+                         imageMessage?.caption || 
+                         '';
+            
+            // Skip if no text AND no image
+            if (!text && !hasImage) continue;
 
             // --- WhatsApp Allowlist Check ---
             // If we couldn't identify a valid mobile sender, skip (e.g. status updates, group notifications)
@@ -270,15 +289,34 @@ async function startWhatsApp() {
             }
 
             try {
+                // --- Download image if present ---
+                let imageData = null;
+                if (hasImage) {
+                    try {
+                        console.log('--- Downloading WhatsApp image ---');
+                        const buffer = await downloadMediaMessage(msg, 'buffer', {});
+                        const mimeType = imageMessage.mimetype || 'image/jpeg';
+                        imageData = {
+                            mimeType,
+                            data: buffer.toString('base64')
+                        };
+                        console.log(`--- Image downloaded: ${mimeType}, ${buffer.length} bytes ---`);
+                    } catch (imgErr) {
+                        console.error('Error downloading image:', imgErr);
+                    }
+                }
+
                 logAudit('message_received', {
                     channel: 'whatsapp',
                     sender: effectiveSender,
-                    prompt: text
+                    prompt: text || '[Image]',
+                    hasImage
                 });
 
                 let result = { response: { action: 'allow' } };
 
-                if (config.isGuardEnabled) {
+                // Skip Trend Guard for image messages
+                if (config.isGuardEnabled && !hasImage && text) {
                     console.log(`--- Trend Guard Request (WhatsApp: ${effectiveSender}) ---`);
                     console.log(JSON.stringify({ prompt: text }, null, 2));
 
@@ -297,7 +335,7 @@ async function startWhatsApp() {
                     });
 
                     // Emit events before potential block return
-                    io.emit('wa-comm', { role: 'user', text, sender: effectiveSender });
+                    io.emit('wa-comm', { role: 'user', text, sender: effectiveSender, hasImage });
                     io.emit('trend-log', { text, result: result.response, request: result.request || { prompt: text }, source: 'whatsapp' });
 
                     if (result.response.action?.toLowerCase() === 'block') {
@@ -306,20 +344,38 @@ async function startWhatsApp() {
                         continue;
                     }
                 } else {
-                    io.emit('wa-comm', { role: 'user', text, sender: effectiveSender });
-                    io.emit('trend-log', { text, result: result.response, request: result.request || { prompt: text }, source: 'whatsapp' });
+                    io.emit('wa-comm', { role: 'user', text: text || '[Image]', sender: effectiveSender, hasImage });
+                    io.emit('trend-log', { text: text || '[Image]', result: result.response, request: result.request || { prompt: text || '[Image]' }, source: 'whatsapp' });
                 }
 
                 console.log('--- LLM Request ---');
-                console.log(JSON.stringify({ prompt: text }, null, 2));
+                console.log(JSON.stringify({ prompt: text || '[Image]', hasImage }, null, 2));
 
-                const response = await getChatCompletion(text);
+                const response = await getChatCompletion(text || 'Describe this image', imageData);
 
                 console.log('--- LLM Response ---');
-                console.log(JSON.stringify({ text: response }, null, 2));
+                console.log(JSON.stringify({ text: response.text, hasImage: !!response.image }, null, 2));
 
-                await sock.sendMessage(remoteJid, { text: response });
-                io.emit('wa-comm', { role: 'ai', text: response, sender: effectiveSender });
+                // Send text response
+                if (response.text) {
+                    await sock.sendMessage(remoteJid, { text: response.text });
+                }
+
+                // Send image response if present
+                if (response.image) {
+                    const imageBuffer = Buffer.from(response.image.data, 'base64');
+                    await sock.sendMessage(remoteJid, { 
+                        image: imageBuffer,
+                        mimetype: response.image.mimeType
+                    });
+                }
+
+                io.emit('wa-comm', { 
+                    role: 'ai', 
+                    text: response.text || '[Image Response]', 
+                    sender: effectiveSender,
+                    hasImage: !!response.image 
+                });
             } catch (error) {
                 console.error('Error processing WhatsApp message:', error);
                 await sock.sendMessage(remoteJid, { text: '❌ Error processing request.' });
