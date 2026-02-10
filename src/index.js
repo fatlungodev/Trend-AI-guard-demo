@@ -206,17 +206,41 @@ async function startWhatsApp() {
             console.log(JSON.stringify(msg, null, 2));
 
             if (!msg.message || msg.key.fromMe) continue;
+
             const remoteJid = msg.key.remoteJid;
+            const remoteJidAlt = msg.key.remoteJidAlt;
+
+            // Extract mobile number only if it comes from 's.whatsapp.net'
+            const getMobileNumber = (jid) => {
+                if (!jid || !jid.endsWith('@s.whatsapp.net')) return null;
+                return jid.split('@')[0];
+            };
+
+            const senderNumber = getMobileNumber(remoteJid);
+            const senderNumberAlt = getMobileNumber(remoteJidAlt);
+
+            // The effective sender for logging/logic is the first non-null mobile number found
+            const effectiveSender = senderNumber || senderNumberAlt;
+
             const text = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
             if (!text) continue;
 
             // --- WhatsApp Allowlist Check ---
-            const senderNumber = remoteJid.split('@')[0];
-            if (config.whatsappAllowList.length > 0 && !config.whatsappAllowList.includes(senderNumber)) {
-                console.log(`--- Skipping message from non-allowlisted number: ${senderNumber} ---`);
+            // If we couldn't identify a valid mobile sender, skip (e.g. status updates, group notifications)
+            if (!effectiveSender) {
+                console.log('--- Skipping message from non-mobile source ---');
+                continue;
+            }
+
+            const isAllowed = config.whatsappAllowList.length === 0 ||
+                (senderNumber && config.whatsappAllowList.includes(senderNumber)) ||
+                (senderNumberAlt && config.whatsappAllowList.includes(senderNumberAlt));
+
+            if (!isAllowed) {
+                console.log(`--- Skipping message from non-allowlisted number: ${effectiveSender} ---`);
                 logAudit('message_blocked', {
                     channel: 'whatsapp',
-                    sender: senderNumber,
+                    sender: effectiveSender,
                     reason: 'not_in_allowlist'
                 });
                 continue;
@@ -227,7 +251,7 @@ async function startWhatsApp() {
                 logAudit('guard_toggle', {
                     enabled: true,
                     source: 'whatsapp',
-                    sender: senderNumber
+                    sender: effectiveSender
                 });
                 io.emit('status', { isGuardEnabled: true });
                 await sock.sendMessage(remoteJid, { text: '🛡️ AI Guard: ENABLED' });
@@ -238,7 +262,7 @@ async function startWhatsApp() {
                 logAudit('guard_toggle', {
                     enabled: false,
                     source: 'whatsapp',
-                    sender: senderNumber
+                    sender: effectiveSender
                 });
                 io.emit('status', { isGuardEnabled: false });
                 await sock.sendMessage(remoteJid, { text: '⚠️ AI Guard: DISABLED' });
@@ -248,14 +272,14 @@ async function startWhatsApp() {
             try {
                 logAudit('message_received', {
                     channel: 'whatsapp',
-                    sender: senderNumber,
+                    sender: effectiveSender,
                     prompt: text
                 });
 
                 let result = { response: { action: 'allow' } };
 
                 if (config.isGuardEnabled) {
-                    console.log(`--- Trend Guard Request (WhatsApp: ${remoteJid}) ---`);
+                    console.log(`--- Trend Guard Request (WhatsApp: ${effectiveSender}) ---`);
                     console.log(JSON.stringify({ prompt: text }, null, 2));
 
                     result = await checkSecurity(text);
@@ -265,7 +289,7 @@ async function startWhatsApp() {
 
                     logAudit('security_check', {
                         channel: 'whatsapp',
-                        sender: senderNumber,
+                        sender: effectiveSender,
                         prompt: text,
                         action: result.response.action,
                         reasons: result.response.reasons || [],
@@ -273,16 +297,16 @@ async function startWhatsApp() {
                     });
 
                     // Emit events before potential block return
-                    io.emit('wa-comm', { role: 'user', text, sender: senderNumber });
+                    io.emit('wa-comm', { role: 'user', text, sender: effectiveSender });
                     io.emit('trend-log', { text, result: result.response, request: result.request || { prompt: text }, source: 'whatsapp' });
 
                     if (result.response.action?.toLowerCase() === 'block') {
                         await sock.sendMessage(remoteJid, { text: '🚫 Blocked by Trend Vision One AI Guard.' });
-                        io.emit('wa-comm', { role: 'ai', text: '🚫 Blocked by Trend Vision One AI Guard.', sender: senderNumber });
+                        io.emit('wa-comm', { role: 'ai', text: '🚫 Blocked by Trend Vision One AI Guard.', sender: effectiveSender });
                         continue;
                     }
                 } else {
-                    io.emit('wa-comm', { role: 'user', text, sender: senderNumber });
+                    io.emit('wa-comm', { role: 'user', text, sender: effectiveSender });
                     io.emit('trend-log', { text, result: result.response, request: result.request || { prompt: text }, source: 'whatsapp' });
                 }
 
@@ -295,7 +319,7 @@ async function startWhatsApp() {
                 console.log(JSON.stringify({ text: response }, null, 2));
 
                 await sock.sendMessage(remoteJid, { text: response });
-                io.emit('wa-comm', { role: 'ai', text: response, sender: senderNumber });
+                io.emit('wa-comm', { role: 'ai', text: response, sender: effectiveSender });
             } catch (error) {
                 console.error('Error processing WhatsApp message:', error);
                 await sock.sendMessage(remoteJid, { text: '❌ Error processing request.' });
