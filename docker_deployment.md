@@ -4,8 +4,6 @@
 ```text
 bash
 docker build -t trend-ai-guard .
-# Optional: Override repo URL
-# docker build --build-arg REPO_URL=https://github.com/your-fork/repo.git -t trend-ai-guard .
 ```
 
 #2 Prepare enviroment file and create auth_session folder
