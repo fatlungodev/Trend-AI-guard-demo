@@ -10,6 +10,61 @@ A middleware application that demonstrates integrating **Trend Vision One AI Gua
 - **Gemini LLM**: Powered by Google's latest generative models.
 - **Audit Logging**: Local persistence of all security decisions and interactions.
 
+## Logic Flow
+
++-------------------------------------------------------------+
+|                      WhatsApp User                          |
++------------------------------+------------------------------+
+                               |
+                               v
++------------------------------+------------------------------+
+|                WhatsApp Gateway (Baileys)                   |
++------------------------------+------------------------------+
+                               |
+                               v
++-------------------------------------------------------------+
+| msg.upsert (src/index.js)                                   |
+|                                                             |
+|   1. Whitelist Check                                        |
+|      (Is sender in config.whatsappAllowList?)               |
+|            |                                                |
+|            +----(No)-----> [ STOP & IGNORE ]                |
+|            |                                                |
+|            v                                                |
+|   2. Command Check                                          |
+|      (/guard on | /guard off)                               |
+|            |                                                |
+|            +----(Yes)----> [ TOGGLE & REPLY ]               |
+|            |                                                |
+|            v                                                |
+|   3. Guard Enabled?                                         |
+|      (config.isGuardEnabled)                                |
+|            |                                                |
+|            +----(No)----------------------+                 |
+|            |                              |                 |
+|            v                              |                 |
+|      [ Trend AI Guard ]                   |                 |
+|      (Trend Vision One API)               |                 |
+|            |                              |                 |
+|            v                              |                 |
+|       [ Result? ]                         |                 |
+|        /       \                          |                 |
+|     BLOCK     ALLOW                       |                 |
+|       |         |                         |                 |
+|       v         +-------------------------+                 |
+|  [ REPLY ]      |                                           |
+|  [ BLOCKED ]    v                                           |
+|           [ Gemini AI ]                                     |
+|           (Google GenAI)                                    |
+|                 |                                           |
+|                 v                                           |
+|           [ Generated Text ]                                |
+|                 |                                           |
+|                 v                                           |
+|           [ Reply to User ]                                 |
++-------------------------------------------------------------+
+
+
 ## 📁 Folder Structure
 
 ```text
