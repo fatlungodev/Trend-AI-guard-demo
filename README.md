@@ -12,6 +12,7 @@ A middleware application that demonstrates integrating **Trend Vision One AI Gua
 
 ## 🤖 Logic Flow
 
+```text
 +-------------------------------------------------------------+
 |                      WhatsApp User                          |
 +------------------------------+------------------------------+
