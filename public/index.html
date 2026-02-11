@@ -339,11 +339,17 @@
             <div class="tab active" onclick="switchView('chat', this)">Chat</div>
             <div class="tab" id="auth-tab-btn" onclick="switchView('auth', this)">WhatsApp Auth</div>
             <div class="tab" onclick="switchView('logs', this)">Security Logs</div>
+            <div class="tab" onclick="switchView('console', this)">Server Logs</div>
+            <div class="tab" onclick="switchView('settings', this)">Allowlist</div>
         </div>
 
-        <div style="display: flex; gap: 0.5rem;">
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
             <div id="guard-badge" class="status-badge badge-guard-active">Guard Active</div>
             <div id="session-badge" class="status-badge badge-guard-inactive">Session Off</div>
+            <a href="/logout"
+                style="color: var(--danger); text-decoration: none; font-size: 0.8rem; font-weight: 600; margin-left: 1rem; border: 1px solid var(--danger); padding: 0.2rem 0.6rem; border-radius: 6px; transition: all 0.3s;"
+                onmouseover="this.style.background='var(--danger)'; this.style.color='white'"
+                onmouseout="this.style.background='transparent'; this.style.color='var(--danger)'">Logout</a>
         </div>
     </header>
 
@@ -360,8 +366,10 @@
             <div class="controls-row">
                 <button class="btn-outline" onclick="toggleGuard()">🛡️ Guard</button>
                 <button class="btn-outline" onclick="toggleSession()">🧠 Session</button>
-                <input type="file" id="image-input" accept="image/*" style="display: none;" onchange="handleImageSelect(event)">
-                <button class="image-upload-btn" onclick="document.getElementById('image-input').click()" style="display: none;">📷</button>
+                <input type="file" id="image-input" accept="image/*" style="display: none;"
+                    onchange="handleImageSelect(event)">
+                <button class="image-upload-btn" onclick="document.getElementById('image-input').click()"
+                    style="display: none;">📷</button>
                 <input type="text" id="user-input" placeholder="Type a message to Gemini..."
                     onkeypress="if(event.key === 'Enter') sendMessage()">
                 <button onclick="sendMessage()">Send</button>
@@ -401,13 +409,56 @@
         </div>
     </div>
 
+    <!-- Console View -->
+    <div id="console-view" class="view">
+        <div id="console-container"
+            style="padding: 1.5rem; overflow-y: auto; font-family: 'Courier New', Courier, monospace; font-size: 0.8rem; background: #050a15; flex: 1;">
+            <div style="color: #4ade80; margin-bottom: 0.5rem;">[System] Web Console Log Stream Started.</div>
+        </div>
+    </div>
+
+    <!-- Settings View -->
+    <div id="settings-view" class="view">
+        <div style="padding: 2.5rem; max-width: 600px;">
+            <h2 style="margin-bottom: 1.5rem;">WhatsApp Allowlist</h2>
+            <p style="color: var(--muted); margin-bottom: 2rem;">Only phone numbers in this list can interact with the
+                WhatsApp bot. Leave empty to allow everyone.</p>
+
+            <div
+                style="background: var(--card); padding: 1.5rem; border-radius: 1rem; border: 1px solid rgba(255,255,255,0.1);">
+                <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem;">
+                    <input type="text" id="allowlist-input" placeholder="Enter number (e.g. 852xxxx...)"
+                        style="flex: 1;">
+                    <button onclick="addNumber()" style="padding: 0.8rem 1.5rem;">Add</button>
+                </div>
+
+                <div id="allowlist-container" style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
+                    <!-- Numbers will be added here -->
+                </div>
+            </div>
+
+            <div style="margin-top: 2rem;">
+                <button onclick="saveAllowlist()" style="width: 100%; justify-content: center; padding: 1rem;">Save &
+                    Apply Changes</button>
+                <p id="save-status"
+                    style="text-align: center; margin-top: 1rem; font-size: 0.85rem; color: var(--success); display: none;">
+                    ✅ Changes saved successfully!</p>
+            </div>
+        </div>
+    </div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
         const chatContainer = document.getElementById('chat-container');
         const logContainer = document.getElementById('log-container');
+        const consoleContainer = document.getElementById('console-container');
+        const allowlistContainer = document.getElementById('allowlist-container');
+        const allowlistInput = document.getElementById('allowlist-input');
         const guardBadge = document.getElementById('guard-badge');
         const userInput = document.getElementById('user-input');
+
+        let currentAllowlist = [];
 
         // WhatsApp Elements
         const waHeaderStatus = document.getElementById('wa-header-status');
@@ -448,6 +499,65 @@
                 result: data.result
             });
         });
+
+        socket.on('console-log', (log) => {
+            appendConsoleLog(log);
+        });
+
+        socket.on('console-history', (data) => {
+            consoleContainer.innerHTML = '';
+            if (data.logs) {
+                data.logs.forEach(log => appendConsoleLog(log));
+            }
+        });
+
+        socket.on('allowlist', (data) => {
+            currentAllowlist = data.list || [];
+            renderAllowlist();
+        });
+
+        function renderAllowlist() {
+            allowlistContainer.innerHTML = '';
+            currentAllowlist.forEach((num, index) => {
+                const tag = document.createElement('div');
+                tag.style.background = 'rgba(56, 189, 248, 0.1)';
+                tag.style.border = '1px solid var(--primary)';
+                tag.style.color = 'var(--primary)';
+                tag.style.padding = '0.4rem 0.8rem';
+                tag.style.borderRadius = '999px';
+                tag.style.fontSize = '0.85rem';
+                tag.style.display = 'flex';
+                tag.style.alignItems = 'center';
+                tag.style.gap = '0.5rem';
+
+                tag.innerHTML = `
+                    <span>${num}</span>
+                    <span onclick="removeNumber(${index})" style="cursor: pointer; opacity: 0.6; hover: opacity: 1;">&times;</span>
+                `;
+                allowlistContainer.appendChild(tag);
+            });
+        }
+
+        function addNumber() {
+            const val = allowlistInput.value.trim();
+            if (val && !currentAllowlist.includes(val)) {
+                currentAllowlist.push(val);
+                renderAllowlist();
+                allowlistInput.value = '';
+            }
+        }
+
+        function removeNumber(index) {
+            currentAllowlist.splice(index, 1);
+            renderAllowlist();
+        }
+
+        function saveAllowlist() {
+            socket.emit('update-allowlist', { list: currentAllowlist });
+            const status = document.getElementById('save-status');
+            status.style.display = 'block';
+            setTimeout(() => status.style.display = 'none', 3000);
+        }
 
         socket.on('audit-logs', (data) => {
             logContainer.innerHTML = '';
@@ -549,19 +659,19 @@
         function sendMessage() {
             const text = userInput.value.trim();
             if (!text && !selectedImage) return;
-            
+
             // Show user message with image preview if any
             if (selectedImage) {
                 appendMessage(text || '[Image]', 'user', false, selectedImage);
             } else {
                 appendMessage(text, 'user');
             }
-            
-            socket.emit('message', { 
-                text, 
-                image: selectedImage 
+
+            socket.emit('message', {
+                text,
+                image: selectedImage
             });
-            
+
             userInput.value = '';
             clearImage();
         }
@@ -583,14 +693,14 @@
             const div = document.createElement('div');
             div.className = `message ${role}`;
             if (isBlocked) div.style.borderColor = 'var(--danger)';
-            
+
             // Add text content
             if (text) {
                 const textSpan = document.createElement('span');
                 textSpan.innerText = text;
                 div.appendChild(textSpan);
             }
-            
+
             // Add image if present
             if (image && image.data) {
                 const img = document.createElement('img');
@@ -599,7 +709,7 @@
                 img.alt = 'Image';
                 div.appendChild(img);
             }
-            
+
             chatContainer.appendChild(div);
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
@@ -675,6 +785,24 @@
 
             div.innerHTML = content;
             logContainer.prepend(div);
+        }
+
+        function appendConsoleLog(log) {
+            const div = document.createElement('div');
+            div.style.marginBottom = '0.3rem';
+            div.style.lineHeight = '1.4';
+            div.style.whiteSpace = 'pre-wrap';
+            div.style.wordBreak = 'break-all';
+
+            const timestamp = new Date(log.timestamp).toLocaleTimeString();
+            const color = log.type === 'error' ? '#f87171' : '#cbd5e1';
+            const prefix = log.type === 'error' ? '[ERR]' : '[LOG]';
+
+            div.innerHTML = `<span style="color: #64748b;">[${timestamp}]</span> <span style="color: ${color}; font-weight: bold;">${prefix}</span> <span style="color: ${color};">${log.message}</span>`;
+
+            consoleContainer.appendChild(div);
+            // Auto scroll to bottom
+            consoleContainer.scrollTop = consoleContainer.scrollHeight;
         }
     </script>
 </body>

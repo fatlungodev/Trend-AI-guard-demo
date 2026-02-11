@@ -7,6 +7,7 @@ A middleware application that demonstrates integrating **Trend Vision One AI Gua
 - **WhatsApp Integration**: Turn any WhatsApp account into a secured AI bot.
 - **Trend Vision One AI Guard**: Real-time security scanning for PII, prompt injection, and toxic content.
 - **Web Dashboard**: Monitor real-time logs, audit trails, and toggle security settings.
+- **Secure Access**: Web console is protected by a password-protected login page.
 - **Gemini LLM**: Powered by Google's latest generative models with smart routing.
 - **Image Generation**: Automatic intent detection routes image requests to Gemini Image model.
 - **Image Analysis**: Upload images via WhatsApp for AI-powered analysis.
@@ -17,13 +18,19 @@ A middleware application that demonstrates integrating **Trend Vision One AI Gua
 ## 🤖 Logic Flow
 
 ```text
-+-------------------------------------------------------------+
++------------------------------+------------------------------+
 |                   User (WhatsApp / Web)                     |
 +------------------------------+------------------------------+
                                |
                                v
 +------------------------------+------------------------------+
-|              WhatsApp Gateway / Web Socket                  |
+|              WhatsApp Gateway / Web Login                   |
+|                  (Password Protected)                       |
++------------------------------+------------------------------+
+                               |
+                               v
++------------------------------+------------------------------+
+|                    Web Socket Connection                    |
 +------------------------------+------------------------------+
                                |
                                v
@@ -134,6 +141,8 @@ A middleware application that demonstrates integrating **Trend Vision One AI Gua
    | `GEMINI_IMAGE_MODEL` | `gemini-3-pro-image-preview` | Model for image generation |
    | `GEMINI_HTTPS_PROXY` | (none) | Proxy for Gemini API (for blocked regions) |
    | `V1_HTTPS_PROXY` | (none) | Proxy for Trend Vision One API |
+| `WEB_PASSWORD` | `admin` | Password for web console access |
+| `SESSION_SECRET` | (random) | Secret key for session encryption |
 
 3. **Start the Application**:
    ```bash
@@ -146,11 +155,11 @@ A middleware application that demonstrates integrating **Trend Vision One AI Gua
 ![Web Console Demo](assets/demo.jpg)
 
 Access the dashboard at `http://localhost:3000`. This allows you to:
-- Scan the WhatsApp QR code to link the bot.
-- Chat directly with the secured AI.
-- Toggle **AI Guard** on/off (Web only).
-- Toggle **Session Memory** on/off (Web only).
-- View real-time security logs and LLM responses.
+- **Secure Login**: Access the console via a modern, password-protected login page.
+- **WhatsApp Auth**: Scan the WhatsApp QR code to link the bot.
+- **Direct Chat**: Chat directly with the secured AI.
+- **Security Controls**: Toggle **AI Guard** and **Session Memory** on/off.
+- **Live Monitoring**: View real-time security logs and LLM responses.
 
 ### WhatsApp Bot
 ![WhatsApp Demo](assets/whatsapp_demo.jpg)
@@ -195,7 +204,7 @@ When image generation is detected, the system:
 
 ## 📝 Changelog
 
-- **Feb 2026**: Added image generation, image analysis, session memory, per-user settings
+- **Feb 2026**: Added image generation, image analysis, session memory, per-user settings, and secure web login.
 
 ---
 

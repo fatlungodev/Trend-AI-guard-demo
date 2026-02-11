@@ -8,6 +8,8 @@ import {
 import pino from 'pino';
 import { Boom } from '@hapi/boom';
 import express from 'express';
+import session from 'express-session';
+import cookieParser from 'cookie-parser';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
@@ -19,6 +21,45 @@ import { getChatCompletion } from './services/llm.js';
 import { logAudit, getAuditLogs } from './services/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// --- Console Log Interception ---
+const consoleLogs = [];
+const MAX_CONSOLE_LOGS = 100;
+
+function captureLog(type, args) {
+    const message = args.map(arg =>
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+    ).join(' ');
+
+    const logEntry = {
+        timestamp: new Date().toISOString(),
+        type,
+        message
+    };
+
+    consoleLogs.push(logEntry);
+    if (consoleLogs.length > MAX_CONSOLE_LOGS) {
+        consoleLogs.shift();
+    }
+
+    // Emit to all connected clients if io is ready
+    if (typeof io !== 'undefined') {
+        io.emit('console-log', logEntry);
+    }
+}
+
+const originalLog = console.log;
+const originalError = console.error;
+
+console.log = (...args) => {
+    originalLog.apply(console, args);
+    captureLog('log', args);
+};
+
+console.error = (...args) => {
+    originalError.apply(console, args);
+    captureLog('error', args);
+};
 
 // --- Auth State ---
 let sock = null;
@@ -42,10 +83,10 @@ const MAX_HISTORY_LENGTH = 30; // Max messages to keep per session
  */
 function getMobileSettings(mobileNumber) {
     if (!mobileSettings.has(mobileNumber)) {
-        mobileSettings.set(mobileNumber, { 
-            sessionEnabled: false, 
+        mobileSettings.set(mobileNumber, {
+            sessionEnabled: false,
             guardEnabled: true, // Default ON for WhatsApp
-            history: [] 
+            history: []
         });
     }
     return mobileSettings.get(mobileNumber);
@@ -65,9 +106,9 @@ function isGuardEnabledFor(mobileNumber) {
 function addToHistory(mobileNumber, role, text) {
     const settings = getMobileSettings(mobileNumber);
     if (!settings.sessionEnabled) return;
-    
+
     settings.history.push({ role, text });
-    
+
     // Keep only last MAX_HISTORY_LENGTH messages
     if (settings.history.length > MAX_HISTORY_LENGTH) {
         settings.history = settings.history.slice(-MAX_HISTORY_LENGTH);
@@ -95,9 +136,74 @@ const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer);
 
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+const sessionMiddleware = session({
+    secret: config.sessionSecret,
+    resave: false,
+    saveUninitialized: true,
+    cookie: {
+        secure: false, // Set to true if using HTTPS
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    }
+});
+app.use(sessionMiddleware);
+
+// Share session with Socket.io
+io.use((socket, next) => {
+    sessionMiddleware(socket.request, {}, next);
+});
+
+// Authentication Middleware
+const isAuthenticated = (req, res, next) => {
+    if (req.session && req.session.authenticated) {
+        return next();
+    }
+    res.redirect('/login');
+};
+
+// Login Routes
+app.get('/login', (req, res) => {
+    if (req.session.authenticated) {
+        return res.redirect('/');
+    }
+    res.sendFile(path.join(__dirname, '../public/login.html'));
+});
+
+app.post('/login', (req, res) => {
+    const { password } = req.body;
+    if (password === config.webPassword) {
+        req.session.authenticated = true;
+        res.redirect('/');
+    } else {
+        res.redirect('/login?error=1');
+    }
+});
+
+app.get('/logout', (req, res) => {
+    req.session.destroy();
+    res.redirect('/login');
+});
+
+// Protect the root and all other static files
+app.use('/', (req, res, next) => {
+    if (req.path === '/login') return next();
+    isAuthenticated(req, res, next);
+});
+
 app.use(express.static(path.join(__dirname, '../public')));
 
 io.on('connection', (socket) => {
+    // Check socket session
+    const session = socket.request.session;
+    if (!session || !session.authenticated) {
+        console.log('Unauthorized socket connection attempt');
+        socket.disconnect();
+        return;
+    }
+
     console.log('Web client connected');
     socket.emit('status', { isGuardEnabled: webGuardEnabled, isSessionEnabled: webSessionEnabled });
     socket.emit('wa-status', { status: waStatus });
@@ -106,6 +212,39 @@ io.on('connection', (socket) => {
     // Send historical logs
     getAuditLogs().then(logs => {
         socket.emit('audit-logs', { logs });
+    });
+
+    // Send historical console logs
+    socket.emit('console-history', { logs: consoleLogs });
+
+    // Send current allowlist
+    socket.emit('allowlist', { list: config.whatsappAllowList });
+
+    socket.on('update-allowlist', async (data) => {
+        const newList = data.list || [];
+        config.whatsappAllowList = newList;
+
+        // Persist to .env
+        try {
+            const envPath = path.join(__dirname, '../.env');
+            let envContent = fs.readFileSync(envPath, 'utf8');
+            const allowListStr = newList.join(',');
+
+            if (envContent.includes('WHATSAPP_ALLOW_LIST=')) {
+                envContent = envContent.replace(/WHATSAPP_ALLOW_LIST=.*/, `WHATSAPP_ALLOW_LIST=${allowListStr}`);
+            } else {
+                envContent += `\nWHATSAPP_ALLOW_LIST=${allowListStr}`;
+            }
+
+            fs.writeFileSync(envPath, envContent);
+            console.log('Allowlist updated and persisted:', allowListStr);
+
+            // Broadcast to all clients
+            io.emit('allowlist', { list: config.whatsappAllowList });
+        } catch (error) {
+            console.error('Error persisting allowlist:', error);
+            socket.emit('error', { message: 'Failed to save allowlist' });
+        }
     });
 
     socket.on('wa-logout', async () => {
@@ -232,7 +371,7 @@ io.on('connection', (socket) => {
                 }
             }
 
-            socket.emit('response', { 
+            socket.emit('response', {
                 text: response.text,
                 image: response.image || null, // { mimeType, data }
                 isImageGeneration: response.isImageGeneration || false
@@ -328,13 +467,13 @@ async function startWhatsApp() {
             // --- Check for image message ---
             const imageMessage = msg.message.imageMessage;
             const hasImage = !!imageMessage;
-            
+
             // Get text from conversation, extended text, or image caption
-            const text = msg.message.conversation || 
-                         msg.message.extendedTextMessage?.text || 
-                         imageMessage?.caption || 
-                         '';
-            
+            const text = msg.message.conversation ||
+                msg.message.extendedTextMessage?.text ||
+                imageMessage?.caption ||
+                '';
+
             // Skip if no text AND no image
             if (!text && !hasImage) continue;
 
@@ -507,17 +646,17 @@ async function startWhatsApp() {
                 // Send image response if present
                 if (response.image) {
                     const imageBuffer = Buffer.from(response.image.data, 'base64');
-                    await sock.sendMessage(remoteJid, { 
+                    await sock.sendMessage(remoteJid, {
                         image: imageBuffer,
                         mimetype: response.image.mimeType
                     });
                 }
 
-                io.emit('wa-comm', { 
-                    role: 'ai', 
-                    text: response.text || '[Image Response]', 
+                io.emit('wa-comm', {
+                    role: 'ai',
+                    text: response.text || '[Image Response]',
                     sender: effectiveSender,
-                    hasImage: !!response.image 
+                    hasImage: !!response.image
                 });
             } catch (error) {
                 console.error('Error processing WhatsApp message:', error);

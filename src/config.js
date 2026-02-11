@@ -12,5 +12,7 @@ export const config = {
     v1Proxy: process.env.V1_HTTPS_PROXY || process.env.V1_HTTP_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY,
     // Gemini model names
     geminiTextModel: process.env.GEMINI_TEXT_MODEL || 'gemini-3-flash-preview',
-    geminiImageModel: process.env.GEMINI_IMAGE_MODEL || 'gemini-3-pro-image-preview'
+    geminiImageModel: process.env.GEMINI_IMAGE_MODEL || 'gemini-3-pro-image-preview',
+    webPassword: process.env.WEB_PASSWORD || 'admin',
+    sessionSecret: process.env.SESSION_SECRET || 'trend-ai-guard-secret'
 };
