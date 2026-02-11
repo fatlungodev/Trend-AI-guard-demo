@@ -150,6 +150,46 @@ function clearHistory(mobileNumber) {
     settings.history = [];
 }
 
+/**
+ * Get dashboard stats
+ * @param {number} days - Number of days to look back (0 for all time)
+ */
+async function getDashboardStats(days = 0) {
+    const logs = await getAuditLogs();
+    const stats = {
+        totalRequests: 0,
+        blockedRequests: 0,
+        mobileStats: {}, // { number: { total, blocked } }
+        requestTimeline: [], // { date, count, blocked }
+        daysFiltered: days
+    };
+
+    const now = new Date();
+    const cutoff = days > 0 ? new Date(now.getTime() - (days * 24 * 60 * 60 * 1000)) : null;
+
+    logs.forEach(log => {
+        if (log.event === 'security_check') {
+            const logDate = new Date(log.timestamp);
+            if (cutoff && logDate < cutoff) return;
+
+            stats.totalRequests++;
+            const sender = log.sender || (log.channel === 'web' ? 'Web Interface' : 'Unknown');
+            const action = log.action || 'allow';
+            const isBlocked = action.toLowerCase() === 'block';
+
+            if (isBlocked) stats.blockedRequests++;
+
+            if (!stats.mobileStats[sender]) {
+                stats.mobileStats[sender] = { total: 0, blocked: 0 };
+            }
+            stats.mobileStats[sender].total++;
+            if (isBlocked) stats.mobileStats[sender].blocked++;
+        }
+    });
+
+    return stats;
+}
+
 // --- Express & Socket.io Setup ---
 const app = express();
 const httpServer = createServer(app);
@@ -233,11 +273,21 @@ io.on('connection', (socket) => {
         socket.emit('audit-logs', { logs });
     });
 
+    // Send dashboard stats
+    getDashboardStats().then(stats => {
+        socket.emit('dashboard-stats', stats);
+    });
+
     // Send historical console logs
     socket.emit('console-history', { logs: consoleLogs });
 
     // Send current allowlist
     socket.emit('allowlist', { list: config.whatsappAllowList });
+
+    socket.on('get-stats', async (data) => {
+        const stats = await getDashboardStats(data.days || 0);
+        socket.emit('dashboard-stats', stats);
+    });
 
     socket.on('update-allowlist', async (data) => {
         const newList = data.list || [];

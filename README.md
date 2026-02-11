@@ -6,6 +6,8 @@ A middleware application that demonstrates integrating **Trend Vision One AI Gua
 
 - **WhatsApp Integration**: Turn any WhatsApp account into a secured AI bot.
 - **Trend Vision One AI Guard**: Real-time security scanning for PII, prompt injection, and toxic content.
+- **Security Dashboard**: Visual analytics with charts showing request volume, block rates, and channel distribution.
+- **Time-Based Filtering**: Filter analytics by 30, 60, 90, or 180 days.
 - **Web Dashboard**: Monitor real-time logs, audit trails, and toggle security settings.
 - **Secure Access**: Web console is protected by a password-protected login page.
 - **Server Log Streaming**: View real-time application and error logs directly in the web UI.
@@ -158,6 +160,8 @@ A middleware application that demonstrates integrating **Trend Vision One AI Gua
 
 Access the dashboard at `http://localhost:3000`. This allows you to:
 - **Secure Login**: Access the console via a modern, password-protected login page.
+- **Security Dashboard**: View high-level metrics and trends with Chart.js visualization.
+- **Time Range Filter**: Summarize security data for the last 30, 60, 90, or 180 days.
 - **WhatsApp Auth**: Scan the WhatsApp QR code to link the bot.
 - **Direct Chat**: Chat directly with the secured AI.
 - **Security Controls**: Toggle **AI Guard** and **Session Memory** on/off.
