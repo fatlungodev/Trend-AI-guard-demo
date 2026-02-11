@@ -8,6 +8,8 @@ A middleware application that demonstrates integrating **Trend Vision One AI Gua
 - **Trend Vision One AI Guard**: Real-time security scanning for PII, prompt injection, and toxic content.
 - **Web Dashboard**: Monitor real-time logs, audit trails, and toggle security settings.
 - **Secure Access**: Web console is protected by a password-protected login page.
+- **Server Log Streaming**: View real-time application and error logs directly in the web UI.
+- **Dynamic Allowlist**: Manage authorized WhatsApp numbers from the web console with zero-restart persistence.
 - **Gemini LLM**: Powered by Google's latest generative models with smart routing.
 - **Image Generation**: Automatic intent detection routes image requests to Gemini Image model.
 - **Image Analysis**: Upload images via WhatsApp for AI-powered analysis.
@@ -159,6 +161,8 @@ Access the dashboard at `http://localhost:3000`. This allows you to:
 - **WhatsApp Auth**: Scan the WhatsApp QR code to link the bot.
 - **Direct Chat**: Chat directly with the secured AI.
 - **Security Controls**: Toggle **AI Guard** and **Session Memory** on/off.
+- **Server Logs**: Real-time terminal output and error tracking in a dedicated tab.
+- **Allowlist Tab**: Add/remove authorized WhatsApp numbers with instant `.env` persistence.
 - **Live Monitoring**: View real-time security logs and LLM responses.
 
 ### WhatsApp Bot
@@ -204,7 +208,7 @@ When image generation is detected, the system:
 
 ## 📝 Changelog
 
-- **Feb 2026**: Added image generation, image analysis, session memory, per-user settings, and secure web login.
+- **Feb 2026**: Added image generation, image analysis, session memory, per-user settings, secure web login, real-time log streaming, and dynamic allowlist management.
 
 ---
 
