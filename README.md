@@ -199,4 +199,4 @@ When image generation is detected, the system:
 
 ---
 
-Author: Alan Leung 🇭🇰  6-Feb-2026
+Author: Alan Leung 🇭🇰(Hong Kong)  6-Feb-2026
