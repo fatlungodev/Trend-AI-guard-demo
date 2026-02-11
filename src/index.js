@@ -27,9 +27,28 @@ const consoleLogs = [];
 const MAX_CONSOLE_LOGS = 100;
 
 function captureLog(type, args) {
-    const message = args.map(arg =>
-        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-    ).join(' ');
+    const message = args.map(arg => {
+        try {
+            if (typeof arg === 'object' && arg !== null) {
+                // Handle common objects like Errors which don't stringify well
+                if (arg instanceof Error) {
+                    return `${arg.name}: ${arg.message}\n${arg.stack}`;
+                }
+                // Use a simple replacement for circular refs
+                const cache = new Set();
+                return JSON.stringify(arg, (key, value) => {
+                    if (typeof value === 'object' && value !== null) {
+                        if (cache.has(value)) return '[Circular]';
+                        cache.add(value);
+                    }
+                    return value;
+                }, 2);
+            }
+            return String(arg);
+        } catch (e) {
+            return `[Serialization Error: ${e.message}]`;
+        }
+    }).join(' ');
 
     const logEntry = {
         timestamp: new Date().toISOString(),
